@@ -11,7 +11,6 @@ Manages learning progress and performance metrics.
 Author: AI Learning Platform Team
 """
 
-import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from statistics import mean, stdev, variance
@@ -20,9 +19,9 @@ from src.database.crud import (
     get_progress_records,
     create_progress_record
 )
-from src.utils.logger import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
 
 
 class LearningMemory:
@@ -470,6 +469,84 @@ class LearningMemory:
             "pending_tasks": 0,
             "days_active": 0
         }
+
+
+class LearningMemoryManager:
+    """
+    Manager interface for learning memory operations.
+    
+    Provides a higher-level API for accessing learning metrics
+    and progress tracking. Acts as a wrapper around LearningMemory.
+    
+    Example:
+        >>> manager = LearningMemoryManager()
+        >>> summary = manager.get_performance_summary(goal_id=1)
+    """
+    
+    def __init__(self):
+        """Initialize the learning memory manager."""
+        self.memory = get_learning_memory()
+    
+    def get_performance_summary(self, goal_id: int) -> Dict[str, Any]:
+        """
+        Get a performance summary for a goal.
+        
+        Wraps get_performance_metrics() to provide a consistent interface.
+        
+        Args:
+            goal_id: ID of the learning goal
+        
+        Returns:
+            Dictionary with performance metrics
+        """
+        return self.memory.get_performance_metrics(goal_id)
+    
+    def record_task_completion(
+        self,
+        task_id: int,
+        time_minutes: int,
+        quality_rating: Optional[int] = None
+    ) -> bool:
+        """
+        Record a task completion.
+        
+        Args:
+            task_id: ID of the completed task
+            time_minutes: Time spent on task in minutes
+            quality_rating: Optional quality rating (1-5)
+        
+        Returns:
+            True if recorded successfully
+        """
+        return self.memory.record_completion(
+            task_id=task_id,
+            time_minutes=time_minutes,
+            quality_rating=quality_rating
+        )
+    
+    def get_completion_history(self, goal_id: int) -> List[Dict[str, Any]]:
+        """
+        Get completion history for a goal.
+        
+        Args:
+            goal_id: ID of the learning goal
+        
+        Returns:
+            List of completed tasks
+        """
+        return self.memory.get_completion_history(goal_id)
+    
+    def get_learning_gaps(self, goal_id: int) -> List[str]:
+        """
+        Get identified learning gaps for a goal.
+        
+        Args:
+            goal_id: ID of the learning goal
+        
+        Returns:
+            List of learning gaps/weak areas
+        """
+        return self.memory.get_learning_gaps(goal_id)
 
 
 # Singleton instance

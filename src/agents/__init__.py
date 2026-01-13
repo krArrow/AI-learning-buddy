@@ -11,7 +11,6 @@ Agents:
 from src.agents.goal_clarifier import GoalClarifierAgent
 from src.agents.content_curator import ContentCuratorAgent
 from src.agents.assessment_agent import AssessmentAgent
-from src.agents.adaptation_agent import AdaptationAgent
 from src.agents.insight_agent import InsightAgent
 
 __all__ = [

@@ -364,3 +364,238 @@ class AssessmentCRUD:
         return session.query(Assessment).filter(
             Assessment.goal_id == goal_id
         ).order_by(desc(Assessment.created_at)).all()
+
+
+# ============================================================================
+# Helper Functions for Common Operations
+# ============================================================================
+
+def create_progress_record(
+    goal_id: int,
+    completion_percentage: float,
+    tasks_completed: int,
+    tasks_total: int,
+    notes: Optional[str] = None,
+    session: Optional[Session] = None
+) -> Progress:
+    """
+    Helper function to create or update a progress record.
+    
+    Args:
+        goal_id: ID of the learning goal
+        completion_percentage: Percentage of completion (0-100)
+        tasks_completed: Number of tasks completed
+        tasks_total: Total number of tasks
+        notes: Optional notes about the progress
+        session: Database session (creates new if not provided)
+        
+    Returns:
+        Progress record
+    """
+    from src.database.db import DatabaseManager
+    
+    if session is None:
+        session = DatabaseManager.get_session()
+    
+    try:
+        return ProgressCRUD.create_or_update(
+            session=session,
+            goal_id=goal_id,
+            progress_date=date.today(),
+            tasks_completed=tasks_completed,
+            tasks_total=tasks_total,
+            notes=notes
+        )
+    except Exception as e:
+        logger.error(f"Failed to create progress record: {e}", exc_info=True)
+        raise
+    finally:
+        if session:
+            session.close()
+
+
+# ============================================================================
+# Conversation Helper Functions
+# ============================================================================
+
+def create_conversation(
+    goal_id: int,
+    agent_type: str,
+    user_message: str,
+    ai_response: str,
+    session: Optional[Session] = None
+) -> Conversation:
+    """
+    Helper function to create a conversation record.
+    
+    Args:
+        goal_id: ID of the learning goal
+        agent_type: Type of agent handling the conversation
+        user_message: User's message
+        ai_response: AI's response
+        session: Database session (creates new if not provided)
+        
+    Returns:
+        Conversation record
+    """
+    from src.database.db import DatabaseManager
+    
+    if session is None:
+        session = DatabaseManager.get_session()
+    
+    try:
+        return ConversationCRUD.create(
+            session=session,
+            goal_id=goal_id,
+            agent_type=agent_type,
+            user_message=user_message,
+            ai_response=ai_response
+        )
+    except Exception as e:
+        logger.error(f"Failed to create conversation: {e}", exc_info=True)
+        raise
+    finally:
+        if session:
+            session.close()
+
+
+def get_conversations(
+    goal_id: int,
+    limit: Optional[int] = None,
+    session: Optional[Session] = None
+) -> List[Conversation]:
+    """
+    Helper function to get conversation history for a goal.
+    
+    Args:
+        goal_id: ID of the learning goal
+        limit: Maximum number of conversations to retrieve
+        session: Database session (creates new if not provided)
+        
+    Returns:
+        List of conversation records
+    """
+    from src.database.db import DatabaseManager
+    
+    if session is None:
+        session = DatabaseManager.get_session()
+    
+    try:
+        return ConversationCRUD.get_by_goal_id(
+            session=session,
+            goal_id=goal_id,
+            limit=limit
+        )
+    except Exception as e:
+        logger.error(f"Failed to get conversations: {e}", exc_info=True)
+        return []
+    finally:
+        if session:
+            session.close()
+
+
+def delete_goal_conversations(
+    goal_id: int,
+    session: Optional[Session] = None
+) -> int:
+    """
+    Helper function to delete all conversations for a goal.
+    
+    Args:
+        goal_id: ID of the learning goal
+        session: Database session (creates new if not provided)
+        
+    Returns:
+        Number of conversations deleted
+    """
+    from src.database.db import DatabaseManager
+    
+    if session is None:
+        session = DatabaseManager.get_session()
+    
+    try:
+        count = session.query(Conversation).filter(
+            Conversation.goal_id == goal_id
+        ).delete()
+        session.commit()
+        logger.info(f"Deleted {count} conversations for goal {goal_id}")
+        return count
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Failed to delete conversations: {e}", exc_info=True)
+        raise
+    finally:
+        if session:
+            session.close()
+
+
+# ============================================================================
+# Task Helper Functions
+# ============================================================================
+
+def get_tasks_by_goal(
+    goal_id: int,
+    session: Optional[Session] = None
+) -> List[Task]:
+    """
+    Helper function to get all tasks for a goal.
+    
+    Args:
+        goal_id: ID of the learning goal
+        session: Database session (creates new if not provided)
+        
+    Returns:
+        List of task records
+    """
+    from src.database.db import DatabaseManager
+    
+    if session is None:
+        session = DatabaseManager.get_session()
+    
+    try:
+        return TaskCRUD.get_by_goal_id(
+            session=session,
+            goal_id=goal_id
+        )
+    except Exception as e:
+        logger.error(f"Failed to get tasks: {e}", exc_info=True)
+        return []
+    finally:
+        if session:
+            session.close()
+
+
+# ============================================================================
+# Progress Helper Functions
+# ============================================================================
+
+def get_progress_records(
+    goal_id: int,
+    session: Optional[Session] = None
+) -> List[Progress]:
+    """
+    Helper function to get all progress records for a goal.
+    
+    Args:
+        goal_id: ID of the learning goal
+        session: Database session (creates new if not provided)
+        
+    Returns:
+        List of progress records
+    """
+    from src.database.db import DatabaseManager
+    
+    if session is None:
+        session = DatabaseManager.get_session()
+    
+    try:
+        return ProgressCRUD.get_by_goal_id(
+            session=session,
+            goal_id=goal_id
+        )
+    except Exception as e:
+        logger.error(f"Failed to get progress records: {e}", exc_info=True)
+        return []
+    finally:
+        if session:
+            session.close()

@@ -9,7 +9,7 @@ from sqlalchemy import (
     DateTime, Date, ForeignKey, JSON
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
 from sqlalchemy.sql import func
 
 Base = declarative_base()
@@ -21,64 +21,64 @@ class LearningGoal(Base):
     """
     __tablename__ = "learning_goals"
     
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    goal_text: str = Column(String(500), nullable=False, index=True)
-    level: str = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
+    goal_text: Mapped[str] = Column(String(500), nullable=False, index=True)
+    level: Mapped[str] = Column(
         String(50), 
         nullable=False,
         default="beginner",
         comment="beginner, intermediate, or advanced"
     )
-    daily_minutes: int = Column(Integer, nullable=False, default=30)
-    learning_style: str = Column(
+    daily_minutes: Mapped[int] = Column(Integer, nullable=False, default=30)
+    learning_style: Mapped[Optional[str]] = Column(
         String(50),
         nullable=True,
         default="visual",
         comment="visual, kinesthetic, auditory, or reading"
     )
-    pace: str = Column(
+    pace: Mapped[Optional[str]] = Column(
         String(50),
         nullable=True,
         default="medium",
         comment="slow, medium, or fast"
     )
-    preferences: Dict[str, Any] = Column(JSON, nullable=True, default=dict)
-    created_at: datetime = Column(
+    preferences: Mapped[Optional[Dict[str, Any]]] = Column(JSON, nullable=True, default=dict)
+    created_at: Mapped[datetime] = Column(
         DateTime, 
         nullable=False, 
         default=func.now(),
         index=True
     )
-    updated_at: datetime = Column(
+    updated_at: Mapped[datetime] = Column(
         DateTime, 
         nullable=False, 
         default=func.now(),
         onupdate=func.now()
     )
-    is_active: bool = Column(Boolean, nullable=False, default=True, index=True)
+    is_active: Mapped[bool] = Column(Boolean, nullable=False, default=True, index=True)
     
     # Relationships
-    roadmaps: List["Roadmap"] = relationship(
+    roadmaps: Mapped[List["Roadmap"]] = relationship(
         "Roadmap", 
         back_populates="goal",
         cascade="all, delete-orphan"
     )
-    tasks: List["Task"] = relationship(
+    tasks: Mapped[List["Task"]] = relationship(
         "Task",
         back_populates="goal",
         cascade="all, delete-orphan"
     )
-    progress_records: List["Progress"] = relationship(
+    progress_records: Mapped[List["Progress"]] = relationship(
         "Progress",
         back_populates="goal",
         cascade="all, delete-orphan"
     )
-    conversations: List["Conversation"] = relationship(
+    conversations: Mapped[List["Conversation"]] = relationship(
         "Conversation",
         back_populates="goal",
         cascade="all, delete-orphan"
     )
-    assessments: List["Assessment"] = relationship(
+    assessments: Mapped[List["Assessment"]] = relationship(
         "Assessment",
         back_populates="goal",
         cascade="all, delete-orphan"
@@ -94,24 +94,24 @@ class Roadmap(Base):
     """
     __tablename__ = "roadmaps"
     
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    goal_id: int = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = Column(
         Integer, 
         ForeignKey("learning_goals.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
-    roadmap_json: str = Column(
+    roadmap_json: Mapped[str] = Column(
         Text,
         nullable=False,
         comment="Full roadmap structure as JSON string"
     )
-    modules_count: int = Column(Integer, nullable=False, default=0)
-    estimated_weeks: int = Column(Integer, nullable=True)
-    created_at: datetime = Column(DateTime, nullable=False, default=func.now())
+    modules_count: Mapped[int] = Column(Integer, nullable=False, default=0)
+    estimated_weeks: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    created_at: Mapped[datetime] = Column(DateTime, nullable=False, default=func.now())
     
     # Relationships
-    goal: LearningGoal = relationship("LearningGoal", back_populates="roadmaps")
+    goal: Mapped["LearningGoal"] = relationship("LearningGoal", back_populates="roadmaps")
     
     def __repr__(self) -> str:
         return f"<Roadmap(id={self.id}, goal_id={self.goal_id}, modules={self.modules_count})>"
@@ -123,36 +123,36 @@ class Task(Base):
     """
     __tablename__ = "tasks"
     
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    goal_id: int = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = Column(
         Integer,
         ForeignKey("learning_goals.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
-    day_number: int = Column(Integer, nullable=False, index=True)
-    task_text: str = Column(String(1000), nullable=False)
-    why_text: str = Column(Text, nullable=True)
-    estimated_minutes: int = Column(Integer, nullable=True)
-    resources_json: List[Dict[str, Any]] = Column(
+    day_number: Mapped[int] = Column(Integer, nullable=False, index=True)
+    task_text: Mapped[str] = Column(String(1000), nullable=False)
+    why_text: Mapped[Optional[str]] = Column(Text, nullable=True)
+    estimated_minutes: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    resources_json: Mapped[Optional[List[Dict[str, Any]]]] = Column(
         JSON,
         nullable=True,
         default=list,
         comment="List of learning resources"
     )
-    difficulty_score: float = Column(
+    difficulty_score: Mapped[Optional[float]] = Column(
         Float,
         nullable=True,
         default=0.5,
         comment="Difficulty score between 0.0 and 1.0"
     )
-    is_completed: bool = Column(Boolean, nullable=False, default=False, index=True)
-    completed_at: Optional[datetime] = Column(DateTime, nullable=True)
-    completion_time_minutes: Optional[int] = Column(Integer, nullable=True)
-    created_at: datetime = Column(DateTime, nullable=False, default=func.now())
+    is_completed: Mapped[bool] = Column(Boolean, nullable=False, default=False, index=True)
+    completed_at: Mapped[Optional[datetime]] = Column(DateTime, nullable=True)
+    completion_time_minutes: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    created_at: Mapped[datetime] = Column(DateTime, nullable=False, default=func.now())
     
     # Relationships
-    goal: LearningGoal = relationship("LearningGoal", back_populates="tasks")
+    goal: Mapped["LearningGoal"] = relationship("LearningGoal", back_populates="tasks")
     
     def __repr__(self) -> str:
         status = "✓" if self.is_completed else "○"
@@ -165,27 +165,27 @@ class Progress(Base):
     """
     __tablename__ = "progress"
     
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    goal_id: int = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = Column(
         Integer,
         ForeignKey("learning_goals.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
-    date: datetime = Column(Date, nullable=False, index=True)
-    tasks_completed: int = Column(Integer, nullable=False, default=0)
-    tasks_total: int = Column(Integer, nullable=False, default=0)
-    completion_percentage: float = Column(
+    date: Mapped[datetime] = Column(Date, nullable=False, index=True)
+    tasks_completed: Mapped[int] = Column(Integer, nullable=False, default=0)
+    tasks_total: Mapped[int] = Column(Integer, nullable=False, default=0)
+    completion_percentage: Mapped[float] = Column(
         Float,
         nullable=False,
         default=0.0,
         comment="Percentage of tasks completed"
     )
-    notes: str = Column(Text, nullable=True)
-    created_at: datetime = Column(DateTime, nullable=False, default=func.now())
+    notes: Mapped[Optional[str]] = Column(Text, nullable=True)
+    created_at: Mapped[datetime] = Column(DateTime, nullable=False, default=func.now())
     
     # Relationships
-    goal: LearningGoal = relationship("LearningGoal", back_populates="progress_records")
+    goal: Mapped["LearningGoal"] = relationship("LearningGoal", back_populates="progress_records")
     
     def __repr__(self) -> str:
         return f"<Progress(id={self.id}, date={self.date}, {self.completion_percentage:.1f}%)>"
@@ -197,22 +197,22 @@ class Conversation(Base):
     """
     __tablename__ = "conversations"
     
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    goal_id: int = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = Column(
         Integer,
         ForeignKey("learning_goals.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
-    agent_type: str = Column(
+    agent_type: Mapped[str] = Column(
         String(100),
         nullable=False,
         index=True,
         comment="Type of agent that handled the conversation"
     )
-    user_message: str = Column(Text, nullable=False)
-    ai_response: str = Column(Text, nullable=False)
-    timestamp: datetime = Column(
+    user_message: Mapped[str] = Column(Text, nullable=False)
+    ai_response: Mapped[str] = Column(Text, nullable=False)
+    timestamp: Mapped[datetime] = Column(
         DateTime,
         nullable=False,
         default=func.now(),
@@ -220,7 +220,7 @@ class Conversation(Base):
     )
     
     # Relationships
-    goal: LearningGoal = relationship("LearningGoal", back_populates="conversations")
+    goal: Mapped["LearningGoal"] = relationship("LearningGoal", back_populates="conversations")
     
     def __repr__(self) -> str:
         return f"<Conversation(id={self.id}, agent='{self.agent_type}', time={self.timestamp})>"
@@ -232,27 +232,27 @@ class Assessment(Base):
     """
     __tablename__ = "assessments"
     
-    id: int = Column(Integer, primary_key=True, autoincrement=True)
-    goal_id: int = Column(
+    id: Mapped[int] = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id: Mapped[int] = Column(
         Integer,
         ForeignKey("learning_goals.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
-    question: str = Column(Text, nullable=False)
-    user_answer: str = Column(Text, nullable=True)
-    is_correct: bool = Column(Boolean, nullable=True)
-    confidence_score: float = Column(
+    question: Mapped[str] = Column(Text, nullable=False)
+    user_answer: Mapped[Optional[str]] = Column(Text, nullable=True)
+    is_correct: Mapped[Optional[bool]] = Column(Boolean, nullable=True)
+    confidence_score: Mapped[Optional[float]] = Column(
         Float,
         nullable=True,
         comment="User's confidence in their answer (0.0 to 1.0)"
     )
-    gap_identified: str = Column(
+    gap_identified: Mapped[Optional[str]] = Column(
         String(500),
         nullable=True,
         comment="Identified knowledge gap if answer was incorrect"
     )
-    created_at: datetime = Column(
+    created_at: Mapped[datetime] = Column(
         DateTime,
         nullable=False,
         default=func.now(),
@@ -260,7 +260,7 @@ class Assessment(Base):
     )
     
     # Relationships
-    goal: LearningGoal = relationship("LearningGoal", back_populates="assessments")
+    goal: Mapped["LearningGoal"] = relationship("LearningGoal", back_populates="assessments")
     
     def __repr__(self) -> str:
         correct_mark = "✓" if self.is_correct else "✗" if self.is_correct is not None else "?"

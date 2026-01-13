@@ -2,6 +2,7 @@
 Database initialization and session management.
 Provides singleton pattern for database connections and table creation.
 """
+from contextlib import contextmanager
 from typing import Optional, Generator
 from pathlib import Path
 from sqlalchemy import create_engine, Engine
@@ -119,19 +120,23 @@ class DatabaseManager:
             logger.error(f"Failed to drop tables: {e}", exc_info=True)
             raise
     
-    def get_session(self) -> Session:
+    @classmethod
+    def get_session(cls) -> Session:
         """
         Get a new database session.
         
         Returns:
             SQLAlchemy Session instance
         """
-        if self._session_factory is None:
+        instance = cls()
+        if instance._session_factory is None:
             raise RuntimeError("Database not initialized. Call initialize() first.")
         
-        return self._session_factory()
+        return instance._session_factory()
     
-    def get_session_context(self) -> Generator[Session, None, None]:
+    @staticmethod
+    @contextmanager
+    def get_session_context() -> Generator[Session, None, None]:
         """
         Get a database session as a context manager.
         Automatically commits on success and rolls back on error.
@@ -140,10 +145,11 @@ class DatabaseManager:
             SQLAlchemy Session instance
             
         Example:
-            with db_manager.get_session_context() as session:
+            with DatabaseManager.get_session_context() as session:
                 user = session.query(User).first()
         """
-        session = self.get_session()
+        instance = DatabaseManager()
+        session = instance.get_session()
         try:
             yield session
             session.commit()

@@ -177,15 +177,17 @@ def validate_state(state: AppState) -> tuple[bool, Optional[str]]:
     
     # Validate learning_style
     if "learning_style" in state:
-        style = state["learning_style"].lower()
-        if style not in VALID_LEARNING_STYLES:
-            return False, f"learning_style must be one of {VALID_LEARNING_STYLES}, got '{style}'"
+        if state["learning_style"] is not None:
+            style = state["learning_style"].lower()
+            if style not in VALID_LEARNING_STYLES:
+                return False, f"learning_style must be one of {VALID_LEARNING_STYLES}, got '{style}'"
     
     # Validate pace
     if "pace" in state:
-        pace = state["pace"].lower()
-        if pace not in VALID_PACES:
-            return False, f"pace must be one of {VALID_PACES}, got '{pace}'"
+        if state["pace"] is not None:
+            pace = state["pace"].lower()
+            if pace not in VALID_PACES:
+                return False, f"pace must be one of {VALID_PACES}, got '{pace}'"
     
     # Validate completion_rate
     if "completion_rate" in state:
@@ -202,8 +204,8 @@ def create_initial_state(
     goal_text: str,
     level: str = "beginner",
     daily_minutes: int = 30,
-    learning_style: str = "visual",
-    pace: str = "medium",
+    learning_style: Optional[str] = "visual",
+    pace: Optional[str] = "medium",
     preferences: Optional[Dict[str, Any]] = None
 ) -> AppState:
     """
@@ -233,10 +235,10 @@ def create_initial_state(
     state: AppState = {
         "goal_id": None,
         "goal_text": goal_text,
-        "level": level.lower(),
+        "level": level.lower() if level else "beginner",
         "daily_minutes": daily_minutes,
-        "learning_style": learning_style.lower(),
-        "pace": pace.lower(),
+        "learning_style": learning_style.lower() if learning_style else "visual",
+        "pace": pace.lower() if pace else "medium",
         "preferences": preferences or {},
         "conversation_history": [],
         "clarification_complete": False,

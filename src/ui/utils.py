@@ -14,7 +14,7 @@ from src.database.crud import (
     LearningGoalCRUD, RoadmapCRUD, TaskCRUD, 
     ProgressCRUD, ConversationCRUD, AssessmentCRUD
 )
-from src.memory.learning_memory import LearningMemoryManager
+from src.memory.learning_memory import LearningMemoryManager, get_learning_memory
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -24,8 +24,8 @@ def get_active_goal() -> Optional[Dict[str, Any]]:
     """Get the currently active learning goal"""
     try:
         if st.session_state.active_goal_id:
-            with DatabaseManager.get_session() as session:
-                goal = LearningGoalCRUD.get(session, st.session_state.active_goal_id)
+            with DatabaseManager.get_session_context() as session:
+                goal = LearningGoalCRUD.get_by_id(session, st.session_state.active_goal_id)
                 if goal:
                     return {
                         "id": goal.id,
@@ -45,7 +45,7 @@ def get_active_goal() -> Optional[Dict[str, Any]]:
 def get_latest_goal() -> Optional[Dict[str, Any]]:
     """Get the most recently created goal"""
     try:
-        with DatabaseManager.get_session() as session:
+        with DatabaseManager.get_session_context() as session:
             goals = LearningGoalCRUD.get_all(session)
             if goals:
                 latest = max(goals, key=lambda g: g.created_at)
@@ -67,8 +67,8 @@ def get_latest_goal() -> Optional[Dict[str, Any]]:
 def get_roadmap(goal_id: int) -> Optional[Dict[str, Any]]:
     """Get roadmap for a goal"""
     try:
-        with DatabaseManager.get_session() as session:
-            roadmap = RoadmapCRUD.get_by_goal(session, goal_id)
+        with DatabaseManager.get_session_context() as session:
+            roadmap = RoadmapCRUD.get_by_goal_id(session, goal_id)
             if roadmap:
                 return {
                     "id": roadmap.id,
@@ -86,8 +86,8 @@ def get_roadmap(goal_id: int) -> Optional[Dict[str, Any]]:
 def get_tasks_for_goal(goal_id: int) -> List[Dict[str, Any]]:
     """Get all tasks for a goal"""
     try:
-        with DatabaseManager.get_session() as session:
-            tasks = TaskCRUD.get_by_goal(session, goal_id)
+        with DatabaseManager.get_session_context() as session:
+            tasks = TaskCRUD.get_by_goal_id(session, goal_id)
             return [
                 {
                     "id": task.id,
@@ -135,11 +135,11 @@ def get_completion_rate(goal_id: int) -> float:
 def mark_task_complete(task_id: int) -> bool:
     """Mark a task as completed"""
     try:
-        with DatabaseManager.get_session() as session:
+        with DatabaseManager.get_session_context() as session:
             TaskCRUD.mark_completed(session, task_id)
             
             # Update progress record
-            task = TaskCRUD.get(session, task_id)
+            task = session.query(Task).filter(Task.id == task_id).first()
             if task:
                 goal_id = task.goal_id
                 
@@ -188,7 +188,7 @@ def get_performance_metrics(goal_id: int) -> Dict[str, Any]:
 def get_progress_history(goal_id: int, days: int = 30) -> List[Dict[str, Any]]:
     """Get progress history for the last N days"""
     try:
-        with DatabaseManager.get_session() as session:
+        with DatabaseManager.get_session_context() as session:
             progress_records = ProgressCRUD.get_by_goal(session, goal_id)
             
             # Get last N days
@@ -215,8 +215,8 @@ def get_progress_history(goal_id: int, days: int = 30) -> List[Dict[str, Any]]:
 def get_learning_gaps(goal_id: int) -> List[str]:
     """Get identified learning gaps"""
     try:
-        with DatabaseManager.get_session() as session:
-            assessments = AssessmentCRUD.get_by_goal(session, goal_id)
+        with DatabaseManager.get_session_context() as session:
+            assessments = AssessmentCRUD.get_by_goal_id(session, goal_id)
             
             gaps = []
             for assessment in assessments:
@@ -251,7 +251,7 @@ def get_current_state() -> AppState:
             level=goal["level"],
             daily_minutes=goal["daily_minutes"],
             learning_style=goal.get("learning_style", "visual"),
-            pace=goal.get("pace", "moderate")
+            pace=goal.get("pace", "medium")
         )
         
         # Update with current data

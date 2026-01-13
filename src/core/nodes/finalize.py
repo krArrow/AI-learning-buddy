@@ -11,14 +11,13 @@ Handles graceful completion of the learning workflow.
 Author: AI Learning Platform Team
 """
 
-import logging
 from datetime import datetime
 from typing import Optional
 from src.core.state import AppState
 from src.database.crud import create_progress_record
-from src.utils.logger import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
 
 
 def finalize_node(state: AppState) -> AppState:

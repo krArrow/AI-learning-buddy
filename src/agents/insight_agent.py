@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 from statistics import mean, stdev
-from src.llm.config import LLMService
+from src.llm.config import LLMConfig
 from src.llm.prompts import INSIGHT_SYSTEM_PROMPT
 from src.utils.logger import setup_logger
 
@@ -44,15 +44,15 @@ class InsightAgent:
         "You're doing great! 75% completion rate. Keep it up..."
     """
     
-    def __init__(self, llm_service: Optional[LLMService] = None):
+    def __init__(self, llm_service: Optional[LLMConfig] = None):
         """
         Initialize the Insight Agent.
         
         Args:
-            llm_service: LLMService instance for API calls
+            llm_service: LLMConfig instance for API calls
                         If None, creates new instance
         """
-        self.llm_service = llm_service or LLMService()
+        self.llm_service = llm_service or LLMConfig()
         self.llm = self.llm_service.get_llm()
         self.logger = logger
         self.logger.info("InsightAgent initialized")

@@ -12,10 +12,10 @@ from src.ui.utils import (
     predict_completion_date, get_tasks_for_goal, get_completion_rate
 )
 from src.agents.insight_agent import InsightAgent
-from src.llm.config import LLMService
-from src.utils.logger import setup_logger
+from src.llm.config import LLMConfig
+from src.utils.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
 
 
 def show():
@@ -86,8 +86,7 @@ def show_ai_insights(goal: Dict):
     try:
         # Generate insights using Insight Agent
         with st.spinner("🔮 Analyzing your learning patterns..."):
-            llm_service = LLMService()
-            insight_agent = InsightAgent(llm_service)
+            insight_agent = InsightAgent()
             
             # Get current state
             from src.ui.utils import get_current_state

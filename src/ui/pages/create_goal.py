@@ -9,11 +9,11 @@ import time
 
 from src.core.state import create_initial_state
 from src.agents.goal_clarifier import GoalClarifierAgent
-from src.llm.config import LLMService
+from src.llm.config import LLMConfig
 from src.ui.utils import run_graph_execution
-from src.utils.logger import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
 
 
 def show():
@@ -96,7 +96,7 @@ def show_initial_input():
             
             pace = st.selectbox(
                 "Preferred Pace",
-                ["Not sure", "Slow", "Moderate", "Fast"],
+                ["Not sure", "Slow", "Medium", "Fast"],
                 help="How quickly do you want to progress?"
             )
         
@@ -160,27 +160,34 @@ def show_clarification_conversation():
     
     # Get next question from agent
     try:
-        llm_service = LLMService()
-        agent = GoalClarifierAgent(llm_service)
+        agent = GoalClarifierAgent()
         
         # Check if we need to ask more questions
         question_count = len([m for m in st.session_state.clarification_messages if m["role"] == "agent"])
         
         if question_count < 5:  # Ask up to 5 clarification questions
-            # Generate next question
+            # Generate next question via clarify_goal
             with st.spinner("🤔 Thinking of the next question..."):
-                question = agent.ask_question(state)
+                state = agent.clarify_goal(state)
             
-            # Add to conversation
-            st.session_state.clarification_messages.append({
-                "role": "agent",
-                "content": question
-            })
-            
-            st.rerun()
-        else:
+            # Extract the last agent response
+            if state.get("conversation_history"):
+                last_message = state["conversation_history"][-1]
+                if last_message.get("role") == "assistant":
+                    question = last_message.get("content", "")
+                    
+                    # Add to conversation
+                    st.session_state.clarification_messages.append({
+                        "role": "agent",
+                        "content": question
+                    })
+                    
+                    st.rerun()
+        
+        if state.get("clarification_complete"):
             # Clarification complete
             st.session_state.clarification_complete = True
+            st.session_state.goal_draft_state = state
             st.rerun()
     
     except Exception as e:
@@ -267,8 +274,14 @@ def show_confirmation():
         st.info(pace.title() if pace else "Moderate (default)")
         
         st.markdown("#### 📚 Preferences")
-        if state.get("preferences"):
-            for pref in state["preferences"].split(",")[:3]:
+        preferences = state.get("preferences", {})
+        if preferences and isinstance(preferences, dict):
+            # Display preferences from dictionary
+            for key, value in list(preferences.items())[:3]:
+                st.caption(f"• {key}: {value}")
+        elif preferences and isinstance(preferences, str):
+            # Handle string format (backward compatibility)
+            for pref in preferences.split(",")[:3]:
                 st.caption(f"• {pref.strip()}")
         else:
             st.caption("• No specific preferences")

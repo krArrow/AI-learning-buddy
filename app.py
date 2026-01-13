@@ -89,7 +89,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.core.graph import build_graph_with_retry, get_graph
 from src.database.db import init_database, DatabaseManager
-from src.memory.vector_store import VectorStoreManager
+from src.memory.vector_store import get_vector_store
 from src.utils.logger import setup_logger
 from src.utils.config import get_settings
 
@@ -156,7 +156,7 @@ def initialize_session_state():
     if "vector_store" not in st.session_state:
         try:
             logger.info("Initializing vector store...")
-            st.session_state.vector_store = VectorStoreManager()
+            st.session_state.vector_store = get_vector_store()
             logger.info("Vector store initialized")
         except Exception as e:
             logger.error(f"Failed to initialize vector store: {e}")

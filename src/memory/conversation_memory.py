@@ -11,7 +11,6 @@ Manages multi-turn conversation history between user and agents.
 Author: AI Learning Platform Team
 """
 
-import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from src.database.crud import (
@@ -19,9 +18,9 @@ from src.database.crud import (
     get_conversations,
     delete_goal_conversations
 )
-from src.utils.logger import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
 
 
 class ConversationMemory:

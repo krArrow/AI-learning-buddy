@@ -11,7 +11,6 @@ ChromaDB-based vector store for learning resources.
 Author: AI Learning Platform Team
 """
 
-import logging
 import os
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -22,12 +21,10 @@ try:
     CHROMA_AVAILABLE = True
 except ImportError:
     CHROMA_AVAILABLE = False
-    logger_init = logging.getLogger(__name__)
-    logger_init.warning("ChromaDB not installed. Vector store will be limited.")
 
-from src.utils.logger import setup_logger
+from src.utils.logger import get_logger
 
-logger = setup_logger(__name__)
+logger = get_logger(__name__)
 
 
 class VectorStore:

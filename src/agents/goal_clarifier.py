@@ -173,6 +173,44 @@ class GoalClarifierAgent:
         except json.JSONDecodeError as e:
             logger.warning(f"JSON decode error: {e}")
             return None
+    
+    def process_answer(
+        self,
+        state: AppState,
+        user_answer: str
+    ) -> AppState:
+        """
+        Process user's answer to clarification questions.
+        
+        Args:
+            state: Current application state
+            user_answer: User's answer to the current question
+            
+        Returns:
+            Updated state with user's answer incorporated
+        """
+        logger.info("[GoalClarifierAgent] Processing user answer")
+        
+        try:
+            # Add user's answer to conversation history
+            conversation = state.get("conversation_history", [])
+            conversation.append({
+                "role": "user",
+                "content": user_answer
+            })
+            
+            # Get next question/confirmation
+            state["conversation_history"] = conversation
+            
+            # Invoke clarify_goal to get next question
+            state = self.clarify_goal(state, user_message=user_answer)
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"[GoalClarifierAgent] Error processing answer: {e}", exc_info=True)
+            state["error"] = f"Failed to process answer: {str(e)}"
+            return state
 
 
 __all__ = ["GoalClarifierAgent"]

@@ -64,7 +64,7 @@ def show_welcome_screen():
     with col2:
         st.markdown("### Quick Start")
         
-        if st.button("🎯 Create Your First Goal", use_container_width=True):
+        if st.button("🎯 Create Your First Goal", width='stretch'):
             st.session_state.current_page = "Create Goal"
             st.rerun()
         
@@ -179,17 +179,17 @@ def show_active_goal_dashboard(goal: dict):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("✅ View Daily Tasks", use_container_width=True):
+        if st.button("✅ View Daily Tasks", width='stretch'):
             st.session_state.current_page = "Daily Tasks"
             st.rerun()
     
     with col2:
-        if st.button("🗺️ View Learning Plan", use_container_width=True):
+        if st.button("🗺️ View Learning Plan", width='stretch'):
             st.session_state.current_page = "View Plan"
             st.rerun()
     
     with col3:
-        if st.button("📈 Check Progress", use_container_width=True):
+        if st.button("📈 Check Progress", width='stretch'):
             st.session_state.current_page = "Progress"
             st.rerun()
     

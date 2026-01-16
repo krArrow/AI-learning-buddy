@@ -84,7 +84,7 @@ class ContentCuratorAgent:
                 else:
                     logger.warning(f"[ContentCuratorAgent] Invalid resource: {error}")
             
-            logger.info(f"[ContentCuratorAgent] {len(valid_resources)} valid resources")
+            logger.info(f"[ContentCuratorAgent] {len(valid_resources)} valid resources after validation")
             
             # Step 3: Rank and select top resources
             # Already sorted by combined_score in course_search
@@ -93,13 +93,14 @@ class ContentCuratorAgent:
             # Update state
             state["resources"] = top_resources
             
-            logger.info(f"[ContentCuratorAgent] Curation complete: {len(top_resources)} resources")
+            logger.info(f"[ContentCuratorAgent] Curation complete: {len(top_resources)} resources for goal '{goal_text[:50]}...'")
             
-            # Log top 3 resources
+            # Log top 3 resources with details
             for i, resource in enumerate(top_resources[:3], 1):
-                logger.debug(
-                    f"  {i}. {resource['title']} "
-                    f"({resource['type']}, score={resource.get('combined_score', 0):.2f})"
+                logger.info(
+                    f"[ContentCuratorAgent] Top Resource {i}: {resource['title']} "
+                    f"(type={resource['type']}, platform={resource.get('platform', 'N/A')}, "
+                    f"combined_score={resource.get('combined_score', 0):.2f})"
                 )
             
             return state

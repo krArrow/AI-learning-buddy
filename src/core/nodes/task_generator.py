@@ -127,22 +127,39 @@ def task_generator_node(state: AppState) -> AppState:
         # Attach resources from state
         resources = state.get("resources", [])
         if resources:
+            logger.debug(f"[{node_name}] Attaching {len(resources)} resources to {len(tasks)} tasks")
             for i, task in enumerate(tasks):
-                # Attach 1-2 relevant resources per task
-                task["resources"] = resources[:min(2, len(resources))]
+                # Distribute resources across tasks (rotate them)
+                # This ensures different resources for different days
+                resource_start = (i * 2) % len(resources)
+                task_resources = []
+                
+                # Get 2-3 resources, cycling through the list
+                for j in range(2):
+                    resource_idx = (resource_start + j) % len(resources)
+                    task_resources.append(resources[resource_idx])
+                
+                task["resources"] = task_resources
+                logger.debug(f"[{node_name}] Task {i+1}: Attached {len(task_resources)} resources")
+        else:
+            logger.warning(f"[{node_name}] No resources found in state to attach to tasks")
+            for task in tasks:
+                task["resources"] = []
         
         # Validate tasks
         is_valid, error = validate_tasks(tasks)
         if not is_valid:
             raise ValueError(f"Invalid tasks structure: {error}")
         
-        logger.info(f"[{node_name}] Generated {len(tasks)} tasks")
+        logger.info(f"[{node_name}] Generated {len(tasks)} tasks with resources")
         
         # Store in database if goal_id exists
         if state.get("goal_id"):
             try:
                 with db_manager.get_session_context() as session:
                     for task in tasks:
+                        task_resources = task.get("resources", [])
+                        logger.debug(f"[{node_name}] Storing task '{task['task'][:50]}...' with {len(task_resources)} resources")
                         TaskCRUD.create(
                             session=session,
                             goal_id=state["goal_id"],
@@ -150,7 +167,7 @@ def task_generator_node(state: AppState) -> AppState:
                             task_text=task["task"],
                             why_text=task.get("why", ""),
                             estimated_minutes=task["estimated_minutes"],
-                            resources_json=task.get("resources", []),
+                            resources_json=task_resources,
                             difficulty_score=task["difficulty"]
                         )
                     logger.info(f"[{node_name}] Tasks stored in database")

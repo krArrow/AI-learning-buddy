@@ -22,45 +22,70 @@ def show():
     
     st.markdown('<h1 class="main-header">✅ Daily Learning Tasks</h1>', unsafe_allow_html=True)
     
-    # Check for active goal
-    goal = get_active_goal()
-    
-    if not goal:
-        st.warning("⚠️ No active learning goal found.")
+    try:
+        # Check for active goal
+        goal = get_active_goal()
         
-        if st.button("🎯 Create New Goal", use_container_width=True):
-            st.session_state.current_page = "Create Goal"
+        if not goal:
+            st.warning("⚠️ No active learning goal found.")
+            
+            if st.button("🎯 Create New Goal", width='stretch'):
+                st.session_state.current_page = "Create Goal"
+                st.rerun()
+            
+            return
+        
+        # Validate goal data
+        if not all(k in goal for k in ["id", "goal_text", "level"]):
+            st.error("❌ Invalid goal data. Please create a new goal.")
+            if st.button("🎯 Create New Goal", width='stretch'):
+                st.session_state.current_page = "Create Goal"
+                st.rerun()
+            return
+        
+        # Get tasks
+        tasks = get_tasks_for_goal(goal["id"])
+        
+        if not tasks:
+            st.warning("📋 No tasks have been generated yet.")
+            st.info("Tasks are usually generated when you create a goal. Try creating a new goal or regenerating tasks.")
+            
+            if st.button("🔄 Generate Tasks", width='stretch'):
+                with st.spinner("Generating tasks..."):
+                    state = get_current_state()
+                    updated_state = run_adaptation_loop(state)
+                    
+                    if updated_state.get("tasks"):
+                        st.success("Tasks generated successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to generate tasks")
+            
+            return
+        
+        # Validate tasks data
+        if not isinstance(tasks, list) or len(tasks) == 0:
+            st.error("❌ No valid tasks found.")
+            return
+        
+        # Get current task
+        current_task = get_current_task(goal["id"])
+        
+        if current_task:
+            show_current_task(current_task, tasks)
+        else:
+            show_all_complete(goal, tasks)
+    
+    except Exception as e:
+        logger.error(f"Error displaying daily tasks: {e}", exc_info=True)
+        st.error(f"❌ An error occurred while loading tasks: {e}")
+        
+        if st.button("🔄 Retry"):
             st.rerun()
         
-        return
-    
-    # Get tasks
-    tasks = get_tasks_for_goal(goal["id"])
-    
-    if not tasks:
-        st.warning("📋 No tasks have been generated yet.")
-        st.info("Tasks are usually generated when you create a goal. Try creating a new goal or regenerating tasks.")
-        
-        if st.button("🔄 Generate Tasks", use_container_width=True):
-            with st.spinner("Generating tasks..."):
-                state = get_current_state()
-                updated_state = run_adaptation_loop(state)
-                
-                if updated_state.get("tasks"):
-                    st.success("Tasks generated successfully!")
-                    st.rerun()
-                else:
-                    st.error("Failed to generate tasks")
-        
-        return
-    
-    # Get current task
-    current_task = get_current_task(goal["id"])
-    
-    if current_task:
-        show_current_task(current_task, tasks)
-    else:
-        show_all_complete(goal, tasks)
+        if st.button("🏠 Back to Home"):
+            st.session_state.current_page = "Home"
+            st.rerun()
 
 
 def show_current_task(task: Dict, all_tasks: list):
@@ -133,8 +158,8 @@ def show_task_resources(task: Dict):
     for idx, resource in enumerate(resources):
         if isinstance(resource, dict):
             title = resource.get('title', f'Resource {idx + 1}')
-            url = resource.get('url', '#')
-            res_type = resource.get('type', 'resource')
+            url = resource.get('url', resource.get('link', ''))
+            res_type = resource.get('type', resource.get('resource_type', 'resource'))
             description = resource.get('description', '')
             
             emoji = get_resource_emoji(res_type)
@@ -143,16 +168,25 @@ def show_task_resources(task: Dict):
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    st.markdown(f"{emoji} **[{title}]({url})**")
+                    # Create clickable link if URL exists, otherwise just show the title
+                    if url and url.startswith('http'):
+                        st.markdown(f"{emoji} **[{title}]({url})**")
+                    else:
+                        st.markdown(f"{emoji} **{title}**")
+                    
                     if description:
                         st.caption(description)
                 
                 with col2:
                     st.caption(f"_{res_type}_")
         
-        else:
+        elif isinstance(resource, str):
             # Simple string resource
-            st.write(f"• {resource}")
+            st.write(f"📌 {resource}")
+        
+        else:
+            # Fallback for other types
+            st.write(f"📌 Resource {idx + 1}")
     
     # Tips
     with st.expander("💡 Tips for Using Resources"):
@@ -173,7 +207,7 @@ def show_task_actions(task: Dict, all_tasks: list):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("✅ Mark as Complete", use_container_width=True, type="primary"):
+        if st.button("✅ Mark as Complete", width='stretch', type="primary"):
             success = mark_task_complete(task['id'])
             
             if success:
@@ -192,7 +226,7 @@ def show_task_actions(task: Dict, all_tasks: list):
                 st.error("Failed to mark task as complete. Please try again.")
     
     with col2:
-        if st.button("⏭️ Skip for Now", use_container_width=True):
+        if st.button("⏭️ Skip for Now", width='stretch'):
             st.warning("Task skipped. It will remain in your task list.")
             st.info("💡 Consider coming back to this task later for complete learning.")
             
@@ -201,7 +235,7 @@ def show_task_actions(task: Dict, all_tasks: list):
                 st.rerun()
     
     with col3:
-        if st.button("ℹ️ Need Help?", use_container_width=True):
+        if st.button("ℹ️ Need Help?", width='stretch'):
             st.info("""
             **Having trouble?**
             - Review the resources provided
@@ -286,7 +320,7 @@ def show_all_complete(goal: Dict, tasks: list):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("📋 Generate Next 7 Tasks", use_container_width=True, type="primary"):
+        if st.button("📋 Generate Next 7 Tasks", width='stretch', type="primary"):
             with st.spinner("Generating new tasks based on your progress..."):
                 try:
                     state = get_current_state()
@@ -303,7 +337,7 @@ def show_all_complete(goal: Dict, tasks: list):
                     st.error(f"Error: {e}")
     
     with col2:
-        if st.button("📈 View My Progress", use_container_width=True):
+        if st.button("📈 View My Progress", width='stretch'):
             st.session_state.current_page = "Progress"
             st.rerun()
     

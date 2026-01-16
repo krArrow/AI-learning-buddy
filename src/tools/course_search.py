@@ -109,6 +109,90 @@ MOCK_RESOURCES = {
             "tags": ["intermediate", "practical", "python"]
         },
     ],
+    "spanish": [
+        {
+            "title": "Spanish for Beginners - Duolingo",
+            "url": "https://www.duolingo.com/course/es/en/Learn-Spanish",
+            "type": "interactive",
+            "platform": "Duolingo",
+            "description": "Learn Spanish basics through interactive lessons",
+            "difficulty": 0.2,
+            "estimated_hours": 30,
+            "tags": ["beginner", "interactive", "conversational"]
+        },
+        {
+            "title": "Learn Spanish with SpanishDict",
+            "url": "https://www.spanishdict.com/guide",
+            "type": "article",
+            "platform": "SpanishDict",
+            "description": "Free Spanish lessons and grammar guides",
+            "difficulty": 0.25,
+            "estimated_hours": 20,
+            "tags": ["beginner", "grammar", "reference"]
+        },
+        {
+            "title": "Rosetta Stone - Spanish",
+            "url": "https://www.rosettastone.com/languages/spanish/",
+            "type": "course",
+            "platform": "Rosetta Stone",
+            "description": "Immersive Spanish language learning program",
+            "difficulty": 0.3,
+            "estimated_hours": 60,
+            "tags": ["beginner", "immersive", "comprehensive"]
+        },
+        {
+            "title": "Easy Spanish YouTube Channel",
+            "url": "https://www.youtube.com/c/EasySpanish",
+            "type": "video",
+            "platform": "YouTube",
+            "description": "Real-world Spanish conversations with subtitles",
+            "difficulty": 0.35,
+            "estimated_hours": 25,
+            "tags": ["beginner", "conversational", "videos"]
+        },
+        {
+            "title": "Spanish Grammar in Context",
+            "url": "https://www.spanishdict.com/guide/spanish-grammar",
+            "type": "book",
+            "platform": "SpanishDict",
+            "description": "Comprehensive Spanish grammar reference",
+            "difficulty": 0.4,
+            "estimated_hours": 35,
+            "tags": ["intermediate", "grammar", "reference"]
+        },
+        {
+            "title": "Babbel Spanish Course",
+            "url": "https://www.babbel.com/en/language/learn-spanish",
+            "type": "course",
+            "platform": "Babbel",
+            "description": "Interactive Spanish lessons with real-world scenarios",
+            "difficulty": 0.35,
+            "estimated_hours": 40,
+            "tags": ["beginner", "interactive", "practical"]
+        },
+    ],
+    "language": [
+        {
+            "title": "Busuu Language Learning",
+            "url": "https://www.busuu.com/",
+            "type": "course",
+            "platform": "Busuu",
+            "description": "Learn any language with interactive lessons",
+            "difficulty": 0.3,
+            "estimated_hours": 45,
+            "tags": ["beginner", "interactive", "multilingual"]
+        },
+        {
+            "title": "Language Learning Strategies Guide",
+            "url": "https://blog.linguashop.com/2020/08/how-to-learn-language.html",
+            "type": "article",
+            "platform": "Web",
+            "description": "Proven strategies for effective language learning",
+            "difficulty": 0.2,
+            "estimated_hours": 5,
+            "tags": ["beginner", "tips", "strategies"]
+        },
+    ],
 }
 
 
@@ -249,17 +333,72 @@ def course_search(
     # Extract key topics from query
     query_lower = query.lower()
     relevant_resources = []
+    matched_topics = []
     
-    # Search mock database
+    # Keywords to topic mapping
+    keyword_mapping = {
+        "spanish": ["spanish", "spain", "spanish language"],
+        "python": ["python", "programming"],
+        "javascript": ["javascript", "js", "web development"],
+        "react": ["react", "reactjs"],
+        "machine learning": ["machine learning", "ml", "deep learning", "ai"],
+        "language": ["language", "learn", "fluent"],
+    }
+    
+    # Search mock database with better keyword matching
     for topic, resources in MOCK_RESOURCES.items():
-        if topic in query_lower or any(word in topic for word in query_lower.split()):
+        # Direct topic match
+        if topic in query_lower:
+            matched_topics.append(topic)
             relevant_resources.extend(resources)
+            continue
+        
+        # Check word-by-word match
+        words = query_lower.split()
+        for word in words:
+            if word in topic or topic in word:
+                matched_topics.append(topic)
+                relevant_resources.extend(resources)
+                break
+        
+        # Check keyword mapping
+        for keyword_topic, keywords in keyword_mapping.items():
+            if keyword_topic == topic:
+                for keyword in keywords:
+                    if keyword in query_lower:
+                        matched_topics.append(topic)
+                        relevant_resources.extend(resources)
+                        break
+                if topic in matched_topics:
+                    break
     
-    # If no matches, return some generic resources
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_resources = []
+    for resource in relevant_resources:
+        resource_id = (resource.get('title'), resource.get('url'))
+        if resource_id not in seen:
+            seen.add(resource_id)
+            unique_resources.append(resource)
+    
+    relevant_resources = unique_resources
+    
+    # If no matches, try to infer from query
     if not relevant_resources:
-        logger.warning(f"No resources found for query: {query}")
-        # Return Python resources as default
-        relevant_resources = MOCK_RESOURCES.get("python", [])
+        logger.warning(f"No direct match found for query: {query}. Using fallback matching.")
+        
+        # Check for common learning-related keywords
+        if any(word in query_lower for word in ["spanish", "france", "french", "germany", "german", "italy", "italian", "language"]):
+            # Language learning - return language resources
+            relevant_resources.extend(MOCK_RESOURCES.get("language", []))
+            relevant_resources.extend(MOCK_RESOURCES.get("spanish", []))
+        elif any(word in query_lower for word in ["data", "ai", "machine", "learn"]):
+            relevant_resources.extend(MOCK_RESOURCES.get("machine learning", []))
+        else:
+            # Default to Python as a general programming resource
+            relevant_resources = MOCK_RESOURCES.get("python", [])
+    
+    logger.info(f"[course_search] Matched topics: {matched_topics}. Found {len(relevant_resources)} resources")
     
     # Calculate scores for each resource
     scored_resources = []

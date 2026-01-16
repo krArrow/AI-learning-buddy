@@ -101,7 +101,7 @@ def show_initial_input():
             )
         
         # Submit button
-        submitted = st.form_submit_button("Next: Clarify Details ➡️", use_container_width=True)
+        submitted = st.form_submit_button("Next: Clarify Details ➡️", width='stretch')
         
         if submitted:
             # Validation
@@ -152,7 +152,7 @@ def show_clarification_conversation():
     if st.session_state.clarification_complete:
         st.success("✅ All questions answered! Let's review your preferences.")
         
-        if st.button("Next: Review & Confirm ➡️", use_container_width=True):
+        if st.button("Next: Review & Confirm ➡️", width='stretch'):
             st.session_state.goal_creation_step = "confirmation"
             st.rerun()
         
@@ -162,10 +162,11 @@ def show_clarification_conversation():
     try:
         agent = GoalClarifierAgent()
         
-        # Check if we need to ask more questions
+        # Check if we need to ask more questions (limit to 3 questions max)
         question_count = len([m for m in st.session_state.clarification_messages if m["role"] == "agent"])
+        max_questions = 3
         
-        if question_count < 5:  # Ask up to 5 clarification questions
+        if question_count < max_questions:
             # Generate next question via clarify_goal
             with st.spinner("🤔 Thinking of the next question..."):
                 state = agent.clarify_goal(state)
@@ -184,7 +185,8 @@ def show_clarification_conversation():
                     
                     st.rerun()
         
-        if state.get("clarification_complete"):
+        # Check if max questions reached or clarification is complete
+        if question_count >= max_questions or state.get("clarification_complete"):
             # Clarification complete
             st.session_state.clarification_complete = True
             st.session_state.goal_draft_state = state
@@ -221,13 +223,15 @@ def show_clarification_conversation():
                 "content": user_answer
             })
             
-            # Process answer
-            try:
-                updated_state = agent.process_answer(state, user_answer)
-                st.session_state.goal_draft_state = updated_state
-            except Exception as e:
-                logger.error(f"Error processing answer: {e}")
-                st.error(f"Failed to process answer: {e}")
+            # Update state with user answer
+            state = st.session_state.goal_draft_state
+            conversation = state.get("conversation_history", [])
+            conversation.append({
+                "role": "user",
+                "content": user_answer
+            })
+            state["conversation_history"] = conversation
+            st.session_state.goal_draft_state = state
             
             st.rerun()
     
@@ -292,13 +296,13 @@ def show_confirmation():
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("← Edit Preferences", use_container_width=True):
+        if st.button("← Edit Preferences", width='stretch'):
             st.session_state.goal_creation_step = "initial_input"
             st.session_state.clarification_complete = False
             st.rerun()
     
     with col2:
-        if st.button("✅ Generate My Learning Plan", use_container_width=True, type="primary"):
+        if st.button("✅ Generate My Learning Plan", width='stretch', type="primary"):
             st.session_state.goal_creation_step = "generating"
             st.rerun()
 
@@ -378,11 +382,11 @@ def show_generation_progress():
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🔄 Try Again", use_container_width=True):
+            if st.button("🔄 Try Again", width='stretch'):
                 st.rerun()
         
         with col2:
-            if st.button("← Start Over", use_container_width=True):
+            if st.button("← Start Over", width='stretch'):
                 st.session_state.goal_creation_step = "initial_input"
                 st.session_state.clarification_messages = []
                 st.rerun()

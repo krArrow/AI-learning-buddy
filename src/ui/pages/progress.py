@@ -28,7 +28,7 @@ def show():
     if not goal:
         st.warning("⚠️ No active learning goal found.")
         
-        if st.button("🎯 Create New Goal", use_container_width=True):
+        if st.button("🎯 Create New Goal", width='stretch'):
             st.session_state.current_page = "Create Goal"
             st.rerun()
         
@@ -359,7 +359,7 @@ def show_task_breakdown(goal: Dict):
     st.dataframe(
         df,
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Day": st.column_config.NumberColumn("Day", format="%d"),
             "Difficulty": st.column_config.ProgressColumn(

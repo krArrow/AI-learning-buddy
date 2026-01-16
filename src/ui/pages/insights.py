@@ -30,7 +30,7 @@ def show():
     if not goal:
         st.warning("⚠️ No active learning goal found.")
         
-        if st.button("🎯 Create New Goal", use_container_width=True):
+        if st.button("🎯 Create New Goal", width='stretch'):
             st.session_state.current_page = "Create Goal"
             st.rerun()
         
@@ -70,7 +70,7 @@ def show_insufficient_data_message(completed_tasks: List[Dict]):
     - 🚀 Optimization suggestions
     """)
     
-    if st.button("✅ Go to Tasks", use_container_width=True, type="primary"):
+    if st.button("✅ Go to Tasks", width='stretch', type="primary"):
         st.session_state.current_page = "Daily Tasks"
         st.rerun()
 

@@ -14,6 +14,7 @@ from src.database.crud import (
     LearningGoalCRUD, RoadmapCRUD, TaskCRUD, 
     ProgressCRUD, ConversationCRUD, AssessmentCRUD
 )
+from src.database.models import Task
 from src.memory.learning_memory import LearningMemoryManager, get_learning_memory
 from src.utils.logger import setup_logger
 
@@ -65,46 +66,88 @@ def get_latest_goal() -> Optional[Dict[str, Any]]:
 
 
 def get_roadmap(goal_id: int) -> Optional[Dict[str, Any]]:
-    """Get roadmap for a goal"""
+    """Get roadmap for a goal with proper error handling"""
     try:
         with DatabaseManager.get_session_context() as session:
             roadmap = RoadmapCRUD.get_by_goal_id(session, goal_id)
             if roadmap:
+                # Parse roadmap JSON safely
+                roadmap_data = roadmap.roadmap_json
+                if isinstance(roadmap_data, str):
+                    try:
+                        roadmap_data = json.loads(roadmap_data)
+                    except (json.JSONDecodeError, ValueError) as e:
+                        logger.warning(f"Failed to parse roadmap JSON for goal {goal_id}: {e}")
+                        roadmap_data = {}
+                
+                # Ensure roadmap_data is a dict
+                if not isinstance(roadmap_data, dict):
+                    logger.warning(f"Roadmap data is not a dict, got {type(roadmap_data)}")
+                    roadmap_data = {}
+                
+                # Extract modules from the roadmap data
+                modules = roadmap_data.get("modules", [])
+                if not isinstance(modules, list):
+                    logger.warning(f"Modules in roadmap is not a list, got {type(modules)}")
+                    modules = []
+                
                 return {
                     "id": roadmap.id,
-                    "modules": json.loads(roadmap.roadmap_json),
-                    "modules_count": roadmap.modules_count,
-                    "estimated_weeks": roadmap.estimated_weeks,
+                    "modules": modules,
+                    "modules_count": roadmap.modules_count or len(modules),
+                    "estimated_weeks": roadmap.estimated_weeks or roadmap_data.get("total_weeks", "N/A"),
+                    "total_weeks": roadmap_data.get("total_weeks"),
+                    "milestones": roadmap_data.get("milestones", []),
                     "created_at": roadmap.created_at
                 }
         return None
     except Exception as e:
-        logger.error(f"Error getting roadmap: {e}")
+        logger.error(f"Error getting roadmap for goal {goal_id}: {e}", exc_info=True)
         return None
 
 
 def get_tasks_for_goal(goal_id: int) -> List[Dict[str, Any]]:
-    """Get all tasks for a goal"""
+    """Get all tasks for a goal with proper error handling"""
     try:
         with DatabaseManager.get_session_context() as session:
             tasks = TaskCRUD.get_by_goal_id(session, goal_id)
-            return [
-                {
-                    "id": task.id,
-                    "day_number": task.day_number,
-                    "task_text": task.task_text,
-                    "why_text": task.why_text,
-                    "resources": json.loads(task.resources_json) if task.resources_json else [],
-                    "difficulty_score": task.difficulty_score,
-                    "estimated_minutes": task.estimated_minutes,
-                    "is_completed": task.is_completed,
-                    "completed_at": task.completed_at,
-                    "created_at": task.created_at
-                }
-                for task in tasks
-            ]
+            result = []
+            
+            for task in tasks:
+                try:
+                    # Parse resources JSON safely
+                    resources = task.resources_json
+                    if isinstance(resources, str):
+                        try:
+                            resources = json.loads(resources)
+                        except (json.JSONDecodeError, ValueError):
+                            resources = []
+                    elif resources is None:
+                        resources = []
+                    
+                    # Ensure resources is a list
+                    if not isinstance(resources, list):
+                        resources = []
+                    
+                    result.append({
+                        "id": task.id,
+                        "day_number": task.day_number,
+                        "task_text": task.task_text,
+                        "why_text": task.why_text,
+                        "resources": resources,
+                        "difficulty_score": task.difficulty_score or 5,
+                        "estimated_minutes": task.estimated_minutes or 30,
+                        "is_completed": task.is_completed or False,
+                        "completed_at": task.completed_at,
+                        "created_at": task.created_at
+                    })
+                except Exception as task_error:
+                    logger.warning(f"Error processing task {task.id}: {task_error}")
+                    continue
+            
+            return result
     except Exception as e:
-        logger.error(f"Error getting tasks: {e}")
+        logger.error(f"Error getting tasks for goal {goal_id}: {e}")
         return []
 
 
@@ -144,20 +187,19 @@ def mark_task_complete(task_id: int) -> bool:
                 goal_id = task.goal_id
                 
                 # Get all tasks for this goal
-                all_tasks = TaskCRUD.get_by_goal(session, goal_id)
+                all_tasks = TaskCRUD.get_by_goal_id(session, goal_id)
                 total = len(all_tasks)
                 completed = sum(1 for t in all_tasks if t.is_completed)
                 completion_pct = (completed / total * 100) if total > 0 else 0
                 
                 # Create or update progress record for today
                 today = date.today()
-                ProgressCRUD.create(
+                ProgressCRUD.create_or_update(
                     session,
                     goal_id=goal_id,
-                    date=today,
+                    progress_date=today,
                     tasks_completed=completed,
-                    tasks_total=total,
-                    completion_percentage=completion_pct
+                    tasks_total=total
                 )
             
             logger.info(f"Task {task_id} marked as completed")
@@ -189,7 +231,7 @@ def get_progress_history(goal_id: int, days: int = 30) -> List[Dict[str, Any]]:
     """Get progress history for the last N days"""
     try:
         with DatabaseManager.get_session_context() as session:
-            progress_records = ProgressCRUD.get_by_goal(session, goal_id)
+            progress_records = ProgressCRUD.get_by_goal_id(session, goal_id)
             
             # Get last N days
             cutoff_date = date.today() - timedelta(days=days)
@@ -380,3 +422,64 @@ def get_resource_emoji(resource_type: str) -> str:
         "interactive": "💻"
     }
     return emojis.get(resource_type.lower(), "📌")
+
+
+def verify_resources_match_goal(goal_text: str, resources: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Verify that resources match the learning goal.
+    For debugging purposes to ensure resource matching is working correctly.
+    
+    Args:
+        goal_text: The learning goal text
+        resources: List of resources retrieved
+        
+    Returns:
+        Dictionary with verification results
+    """
+    if not resources:
+        return {
+            "valid": False,
+            "reason": "No resources found",
+            "resource_count": 0,
+            "goal_text": goal_text[:100]
+        }
+    
+    goal_lower = goal_text.lower()
+    
+    # Check for matching keywords
+    resource_types = [r.get("type", "unknown") for r in resources]
+    resource_titles = [r.get("title", "Unknown") for r in resources]
+    resource_descriptions = [r.get("description", "") for r in resources]
+    
+    # Verify resources are relevant
+    matches = []
+    for i, resource in enumerate(resources):
+        title_lower = resource.get("title", "").lower()
+        desc_lower = resource.get("description", "").lower()
+        
+        # Check if resource relates to goal
+        goal_keywords = goal_lower.split()
+        resource_text = f"{title_lower} {desc_lower}".lower()
+        
+        keyword_matches = sum(1 for kw in goal_keywords if len(kw) > 2 and kw in resource_text)
+        matches.append(keyword_matches > 0)
+    
+    matching_resources = sum(matches)
+    match_percentage = (matching_resources / len(resources) * 100) if resources else 0
+    
+    result = {
+        "valid": match_percentage >= 50,  # At least 50% of resources should match
+        "match_percentage": match_percentage,
+        "resource_count": len(resources),
+        "matching_resources": matching_resources,
+        "goal_text": goal_text[:100],
+        "resource_types": resource_types,
+        "top_resources": [
+            f"{r.get('title', 'Unknown')} ({r.get('type', 'unknown')})"
+            for r in resources[:3]
+        ]
+    }
+    
+    logger.info(f"Resource verification: {result}")
+    
+    return result

@@ -138,8 +138,26 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def cleanup_on_exit():
+    """Cleanup function called on application termination"""
+    logger.info("Cleaning up resources on app termination...")
+    try:
+        # Close database connections
+        db_manager = DatabaseManager()
+        db_manager.close()
+        logger.info("Database connections closed successfully")
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+
+
 def initialize_session_state():
     """Initialize all session state variables"""
+    
+    # Register cleanup on app termination
+    if "cleanup_registered" not in st.session_state:
+        st.session_state.cleanup_registered = True
+        import atexit
+        atexit.register(cleanup_on_exit)
     
     # Graph instance
     if "graph" not in st.session_state:
@@ -248,7 +266,7 @@ def show_sidebar():
         }
         
         for label, page_name in pages.items():
-            if st.button(label, key=f"nav_{page_name}", use_container_width=True):
+            if st.button(label, key=f"nav_{page_name}", width='stretch'):
                 st.session_state.current_page = page_name
                 st.rerun()
         

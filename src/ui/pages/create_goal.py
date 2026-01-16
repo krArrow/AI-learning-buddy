@@ -223,16 +223,25 @@ def show_clarification_conversation():
                 "content": user_answer
             })
             
-            # Update state with user answer
+            # Update state with user answer and process through agent
             state = st.session_state.goal_draft_state
-            conversation = state.get("conversation_history", [])
-            conversation.append({
-                "role": "user",
-                "content": user_answer
-            })
-            state["conversation_history"] = conversation
-            st.session_state.goal_draft_state = state
+            agent = GoalClarifierAgent()
             
+            with st.spinner("🤔 Processing your response..."):
+                # Process answer through agent to get next question
+                state = agent.process_answer(state, user_answer)
+            
+            # Extract and display the next question/response
+            if state.get("conversation_history"):
+                last_message = state["conversation_history"][-1]
+                if last_message.get("role") == "assistant":
+                    response = last_message.get("content", "")
+                    st.session_state.clarification_messages.append({
+                        "role": "agent",
+                        "content": response
+                    })
+            
+            st.session_state.goal_draft_state = state
             st.rerun()
     
     # Skip button

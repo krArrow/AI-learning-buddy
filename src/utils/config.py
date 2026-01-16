@@ -52,15 +52,15 @@ class Settings(BaseSettings):
     
     # Agent Configuration
     goal_clarifier_model: str = Field(
-        ...,
+        default="gpt-3.5-turbo",
         description="Model for goal clarification agent"
     )
     content_curator_model: str = Field(
-        ...,
+        default="gpt-3.5-turbo",
         description="Model for content curation agent"
     )
     assessment_agent_model: str = Field(
-        ...,
+        default="gpt-3.5-turbo",
         description="Model for assessment agent"
     )
     

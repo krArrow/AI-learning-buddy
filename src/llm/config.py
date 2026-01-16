@@ -85,7 +85,8 @@ class LLMConfig:
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                openai_api_key=self.settings.openai_api_key,
+                openai_api_key=self.settings.openai_api_key, # FOR OPENROUTER USE OPENROUTER_API_KEY
+                openai_api_base="https://openrouter.ai/api/v1/", # FOR OPENROUTER USE THIS BASE URL
                 streaming=streaming,
                 request_timeout=60,
                 max_retries=3

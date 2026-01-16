@@ -17,9 +17,10 @@ class Settings(BaseSettings):
         extra="ignore"
     )
     
-    # OpenAI Configuration
+    # OpenAI/Openrouter Configuration
     openai_api_key: str = Field(..., description="OpenAI API key")
-    openai_model: str = Field(default="gpt-4-turbo-preview", description="Default OpenAI model")
+    openrouter_api_key: str = Field(..., description="Openrouter API key")
+    openai_model: str = Field(..., description="Default OpenAI model")
     openai_temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Model temperature")
     
     # Database Configuration
@@ -40,8 +41,8 @@ class Settings(BaseSettings):
     )
     
     # Application Configuration
-    app_name: str = Field(default="AI Learning Buddy Advanced", description="Application name")
-    app_version: str = Field(default="2.0.0", description="Application version")
+    app_name: str = Field(default="AI Learning Buddy", description="Application name")
+    app_version: str = Field(default="2.1.4", description="Application version")
     debug_mode: bool = Field(default=False, description="Debug mode flag")
     log_level: str = Field(default="INFO", description="Logging level")
     
@@ -51,15 +52,15 @@ class Settings(BaseSettings):
     
     # Agent Configuration
     goal_clarifier_model: str = Field(
-        default="gpt-4-turbo-preview",
+        ...,
         description="Model for goal clarification agent"
     )
     content_curator_model: str = Field(
-        default="gpt-4-turbo-preview",
+        ...,
         description="Model for content curation agent"
     )
     assessment_agent_model: str = Field(
-        default="gpt-4-turbo-preview",
+        ...,
         description="Model for assessment agent"
     )
     

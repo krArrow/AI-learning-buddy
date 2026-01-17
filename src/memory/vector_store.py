@@ -117,7 +117,7 @@ class VectorStore:
                 "type": str ("video", "article", "course", "tutorial"),
                 "platform": str ("YouTube", "Udemy", "Coursera", etc.),
                 "difficulty": int (1-5, optional),
-                "learning_style": str ("visual", "kinesthetic", "auditory", "reading"),
+                "learning_style": str ("visual", "kinesthetic", "auditory", "reading/writing"),
                 "tags": list (optional, ["python", "beginner"])
             }, ...]
         

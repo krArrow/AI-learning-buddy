@@ -105,7 +105,7 @@ def goal_analysis_node(state: AppState) -> AppState:
         
         # Step 5: Normalize learning_style
         learning_style = state.get("learning_style", "visual").lower().strip()
-        valid_styles = {"visual", "kinesthetic", "auditory", "reading"}
+        valid_styles = {"visual", "kinesthetic", "auditory", "reading_writing"}
         if learning_style not in valid_styles:
             logger.warning(
                 f"[{node_name}] Invalid learning_style '{learning_style}', defaulting to 'visual'"

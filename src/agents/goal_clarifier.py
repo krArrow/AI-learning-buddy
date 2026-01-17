@@ -60,14 +60,43 @@ class GoalClarifierAgent:
         conversation = state.get("conversation_history", [])
         
         try:
-            # If starting conversation, add initial context
+            # If starting conversation, add initial context with ALL form data
             if len(conversation) == 0:
                 logger.info("[GoalClarifierAgent] Starting new conversation")
+                
+                # Build comprehensive initial context with all pre-filled information
+                context_parts = [f"I want to {state['goal_text']}"]
+                
+                # Add level if provided
+                if state.get('level'):
+                    context_parts.append(f"My current level is {state['level']}")
+                
+                # Add daily time commitment
+                if state.get('daily_minutes'):
+                    context_parts.append(f"I can dedicate {state['daily_minutes']} minutes per day")
+                
+                # Add learning style if already selected
+                if state.get('learning_style'):
+                    style_display = state['learning_style'].replace('_', '/').title()
+                    context_parts.append(f"My preferred learning style is {style_display}")
+                
+                # Add pace if already selected
+                if state.get('pace'):
+                    context_parts.append(f"I prefer a {state['pace']} learning pace")
+                
+                # Add any additional preferences
+                if state.get('preferences') and isinstance(state['preferences'], dict):
+                    for key, value in state['preferences'].items():
+                        if value:
+                            context_parts.append(f"{key}: {value}")
+                
+                # Combine all context into initial message
                 initial_context = {
                     "role": "user",
-                    "content": f"I want to {state['goal_text']}"
+                    "content": ". ".join(context_parts) + "."
                 }
                 conversation.append(initial_context)
+                logger.info(f"[GoalClarifierAgent] Initial context: {initial_context['content']}")
             elif user_message:
                 # Add user's response
                 conversation.append({
@@ -192,17 +221,8 @@ class GoalClarifierAgent:
         logger.info("[GoalClarifierAgent] Processing user answer")
         
         try:
-            # Add user's answer to conversation history
-            conversation = state.get("conversation_history", [])
-            conversation.append({
-                "role": "user",
-                "content": user_answer
-            })
-            
-            # Get next question/confirmation
-            state["conversation_history"] = conversation
-            
             # Invoke clarify_goal to get next question
+            # Note: clarify_goal will add the user_message to conversation history
             state = self.clarify_goal(state, user_message=user_answer)
             
             return state

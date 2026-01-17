@@ -335,42 +335,50 @@ def course_search(
     relevant_resources = []
     matched_topics = []
     
-    # Keywords to topic mapping
-    keyword_mapping = {
-        "spanish": ["spanish", "spain", "spanish language"],
-        "python": ["python", "programming"],
-        "javascript": ["javascript", "js", "web development"],
-        "react": ["react", "reactjs"],
-        "machine learning": ["machine learning", "ml", "deep learning", "ai"],
-        "language": ["language", "learn", "fluent"],
+    # Enhanced topic-to-keyword mapping for better matching
+    topic_keywords = {
+        "spanish": ["spanish", "spain", "español", "castellano", "hispanic", "learn spanish", "spanish language"],
+        "python": ["python", "py", "programming", "code", "coding", "script", "scripting"],
+        "javascript": ["javascript", "js", "web development", "frontend", "backend", "node", "web dev"],
+        "react": ["react", "reactjs", "react.js", "jsx", "frontend framework"],
+        "machine learning": ["machine learning", "ml", "deep learning", "ai", "artificial intelligence", "neural", "model", "data science"],
+        "language": ["language", "learn language", "fluent", "fluency", "bilingual", "multilingual", "vocabulary", "grammar"],
     }
     
-    # Search mock database with better keyword matching
+    # Search mock database with improved fuzzy keyword matching
     for topic, resources in MOCK_RESOURCES.items():
+        topic_matched = False
+        
         # Direct topic match
         if topic in query_lower:
-            matched_topics.append(topic)
+            if topic not in matched_topics:
+                matched_topics.append(topic)
             relevant_resources.extend(resources)
+            topic_matched = True
             continue
         
-        # Check word-by-word match
-        words = query_lower.split()
-        for word in words:
-            if word in topic or topic in word:
-                matched_topics.append(topic)
-                relevant_resources.extend(resources)
-                break
-        
-        # Check keyword mapping
-        for keyword_topic, keywords in keyword_mapping.items():
-            if keyword_topic == topic:
-                for keyword in keywords:
-                    if keyword in query_lower:
+        # Check topic keywords for this category
+        if topic in topic_keywords:
+            for keyword in topic_keywords[topic]:
+                if keyword in query_lower or query_lower in keyword:
+                    if topic not in matched_topics:
                         matched_topics.append(topic)
-                        relevant_resources.extend(resources)
-                        break
-                if topic in matched_topics:
+                    relevant_resources.extend(resources)
+                    topic_matched = True
                     break
+        
+        # If not matched yet, check word-by-word similarity
+        if not topic_matched:
+            query_words = set(query_lower.split())
+            topic_words = set(topic.split())
+            
+            # Check for word overlap
+            overlap = query_words & topic_words
+            if overlap:
+                if topic not in matched_topics:
+                    matched_topics.append(topic)
+                relevant_resources.extend(resources)
+                topic_matched = True
     
     # Remove duplicates while preserving order
     seen = set()
@@ -383,20 +391,46 @@ def course_search(
     
     relevant_resources = unique_resources
     
-    # If no matches, try to infer from query
+    # Enhanced fallback matching with better logic
     if not relevant_resources:
-        logger.warning(f"No direct match found for query: {query}. Using fallback matching.")
+        logger.warning(f"No direct match found for query: '{query}'. Using intelligent fallback matching.")
         
-        # Check for common learning-related keywords
-        if any(word in query_lower for word in ["spanish", "france", "french", "germany", "german", "italy", "italian", "language"]):
-            # Language learning - return language resources
+        # Language learning detection
+        language_keywords = ["spanish", "french", "german", "italian", "chinese", "japanese", "language", "fluent", "vocabulary", "grammar", "conversation"]
+        if any(word in query_lower for word in language_keywords):
+            logger.info(f"[course_search] Detected language learning goal. Matching to language resources.")
+            if any(word in query_lower for word in ["spanish", "español"]):
+                relevant_resources.extend(MOCK_RESOURCES.get("spanish", []))
             relevant_resources.extend(MOCK_RESOURCES.get("language", []))
-            relevant_resources.extend(MOCK_RESOURCES.get("spanish", []))
-        elif any(word in query_lower for word in ["data", "ai", "machine", "learn"]):
+            matched_topics.extend(["spanish", "language"])
+        
+        # Data science / ML detection
+        elif any(word in query_lower for word in ["data", "ai", "artificial", "machine", "neural", "model", "deep learning"]):
+            logger.info(f"[course_search] Detected ML/AI goal. Matching to ML resources.")
             relevant_resources.extend(MOCK_RESOURCES.get("machine learning", []))
+            matched_topics.append("machine learning")
+        
+        # Web development detection
+        elif any(word in query_lower for word in ["web", "website", "frontend", "backend", "react", "javascript", "html", "css"]):
+            logger.info(f"[course_search] Detected web development goal.")
+            if "react" in query_lower:
+                relevant_resources.extend(MOCK_RESOURCES.get("react", []))
+                matched_topics.append("react")
+            if any(word in query_lower for word in ["javascript", "js", "web"]):
+                relevant_resources.extend(MOCK_RESOURCES.get("javascript", []))
+                matched_topics.append("javascript")
+        
+        # General programming - only if nothing else matched
+        elif any(word in query_lower for word in ["programming", "code", "coding", "software", "developer"]):
+            logger.info(f"[course_search] Detected general programming goal. Defaulting to Python.")
+            relevant_resources.extend(MOCK_RESOURCES.get("python", []))
+            matched_topics.append("python")
+        
+        # Last resort: return nothing rather than incorrect resources
         else:
-            # Default to Python as a general programming resource
-            relevant_resources = MOCK_RESOURCES.get("python", [])
+            logger.warning(f"[course_search] Could not match query to any topic category. Returning empty results.")
+            # Don't return any resources if we can't match properly
+            relevant_resources = []
     
     logger.info(f"[course_search] Matched topics: {matched_topics}. Found {len(relevant_resources)} resources")
     

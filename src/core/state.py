@@ -29,7 +29,7 @@ class AppState(TypedDict, total=False):
     """Available study time per day in minutes (range: 10-480)"""
     
     learning_style: str
-    """Preferred learning style: 'visual', 'kinesthetic', 'auditory', or 'reading'"""
+    """Preferred learning style: 'visual', 'kinesthetic', 'auditory', or 'reading_writing'"""
     
     pace: str
     """Preferred learning pace: 'slow', 'medium', or 'fast'"""
@@ -80,7 +80,7 @@ class AppState(TypedDict, total=False):
             "day": int,
             "task": str,
             "why": str,
-            "resources": List[str],
+            "resources": List[Dict[str, Any]],  # List of resource dictionaries
             "estimated_minutes": int,
             "difficulty": float
         }
@@ -130,7 +130,7 @@ class AppState(TypedDict, total=False):
 
 # State field validators
 VALID_LEVELS = {"beginner", "intermediate", "advanced"}
-VALID_LEARNING_STYLES = {"visual", "kinesthetic", "auditory", "reading"}
+VALID_LEARNING_STYLES = {"visual", "kinesthetic", "auditory", "reading_writing"}
 VALID_PACES = {"slow", "medium", "fast"}
 MIN_DAILY_MINUTES = 10
 MAX_DAILY_MINUTES = 480  # 8 hours

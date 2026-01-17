@@ -124,23 +124,64 @@ def task_generator_node(state: AppState) -> AppState:
                 )
                 task["difficulty"] = difficulty
         
-        # Attach resources from state
+        # Attach resources from state with smart matching
         resources = state.get("resources", [])
         if resources:
             logger.debug(f"[{node_name}] Attaching {len(resources)} resources to {len(tasks)} tasks")
+            
             for i, task in enumerate(tasks):
-                # Distribute resources across tasks (rotate them)
-                # This ensures different resources for different days
-                resource_start = (i * 2) % len(resources)
+                task_text = task.get("task", "").lower()
                 task_resources = []
                 
-                # Get 2-3 resources, cycling through the list
-                for j in range(2):
-                    resource_idx = (resource_start + j) % len(resources)
-                    task_resources.append(resources[resource_idx])
+                # Strategy: Match resources to task content intelligently
+                # 1. Score each resource by relevance to this task
+                scored_resources = []
+                for resource in resources:
+                    relevance_score = 0.0
+                    
+                    # Check if resource title/description matches task keywords
+                    resource_title = resource.get("title", "").lower()
+                    resource_desc = resource.get("description", "").lower()
+                    resource_text = f"{resource_title} {resource_desc}"
+                    
+                    # Extract key words from task (ignoring common words)
+                    task_words = set(word for word in task_text.split() 
+                                   if len(word) > 3 and word not in ["with", "this", "that", "from", "your", "the", "and"])
+                    
+                    # Count word matches
+                    matches = sum(1 for word in task_words if word in resource_text)
+                    relevance_score = matches / max(len(task_words), 1)
+                    
+                    # Consider difficulty match (early tasks should have easier resources)
+                    task_difficulty = task.get("difficulty", 0.5)
+                    resource_difficulty = resource.get("difficulty", 0.5)
+                    difficulty_diff = abs(task_difficulty - resource_difficulty)
+                    difficulty_score = 1.0 - difficulty_diff
+                    
+                    # Combined score (70% relevance, 30% difficulty match)
+                    combined_score = 0.7 * relevance_score + 0.3 * difficulty_score
+                    
+                    scored_resources.append({
+                        "resource": resource,
+                        "score": combined_score
+                    })
+                
+                # Sort by score and take top 2-3
+                scored_resources.sort(key=lambda x: x["score"], reverse=True)
+                
+                # Take top resources, but ensure variety by not taking same resource for all tasks
+                num_resources = min(2, len(resources))
+                for j in range(num_resources):
+                    # Use round-robin with scoring to ensure variety
+                    idx = (i + j) % len(scored_resources)
+                    task_resources.append(scored_resources[idx]["resource"])
                 
                 task["resources"] = task_resources
-                logger.debug(f"[{node_name}] Task {i+1}: Attached {len(task_resources)} resources")
+                logger.debug(
+                    f"[{node_name}] Task {i+1} ('{task_text[:40]}...'): "
+                    f"Attached {len(task_resources)} resources with avg score "
+                    f"{sum(sr['score'] for sr in scored_resources[:num_resources])/max(num_resources,1):.2f}"
+                )
         else:
             logger.warning(f"[{node_name}] No resources found in state to attach to tasks")
             for task in tasks:
@@ -151,7 +192,23 @@ def task_generator_node(state: AppState) -> AppState:
         if not is_valid:
             raise ValueError(f"Invalid tasks structure: {error}")
         
-        logger.info(f"[{node_name}] Generated {len(tasks)} tasks with resources")
+        # Validate time estimates against daily_minutes budget
+        for task in tasks:
+            task_minutes = task.get("estimated_minutes", 30)
+            if task_minutes > daily_minutes:
+                logger.warning(
+                    f"[{node_name}] Task {task['day']} exceeds daily budget "
+                    f"({task_minutes} > {daily_minutes}). Adjusting to {daily_minutes}."
+                )
+                task["estimated_minutes"] = daily_minutes
+            elif task_minutes < 10:
+                logger.warning(
+                    f"[{node_name}] Task {task['day']} has very low time estimate "
+                    f"({task_minutes} min). Adjusting to minimum 10 minutes."
+                )
+                task["estimated_minutes"] = 10
+        
+        logger.info(f"[{node_name}] Generated {len(tasks)} tasks with resources and validated time estimates")
         
         # Store in database if goal_id exists
         if state.get("goal_id"):

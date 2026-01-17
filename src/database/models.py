@@ -34,7 +34,7 @@ class LearningGoal(Base):
         String(50),
         nullable=True,
         default="visual",
-        comment="visual, kinesthetic, auditory, or reading"
+        comment="visual, kinesthetic, auditory, or reading_writing"
     )
     pace: Mapped[Optional[str]] = Column(
         String(50),

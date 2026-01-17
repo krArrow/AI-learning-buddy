@@ -139,6 +139,47 @@ def show_clarification_conversation():
             st.rerun()
         return
     
+    # Initialize agent
+    agent = GoalClarifierAgent()
+    max_questions = 3
+    
+    # Check if we need to generate the FIRST question (only when conversation is empty)
+    if len(st.session_state.clarification_messages) == 0:
+        try:
+            with st.spinner("🤔 Preparing your first question..."):
+                # Generate the initial question
+                state = agent.clarify_goal(state)
+            
+            # Extract the first agent response
+            if state.get("conversation_history"):
+                last_message = state["conversation_history"][-1]
+                if last_message.get("role") == "assistant":
+                    question = last_message.get("content", "")
+                    
+                    # Add to UI conversation
+                    st.session_state.clarification_messages.append({
+                        "role": "agent",
+                        "content": question
+                    })
+                    
+                    # Save state
+                    st.session_state.goal_draft_state = state
+                    st.rerun()
+        
+        except Exception as e:
+            logger.error(f"Error generating initial question: {e}")
+            st.error(f"An error occurred: {e}")
+            
+            if st.button("🔄 Retry"):
+                st.rerun()
+            
+            if st.button("← Start Over"):
+                st.session_state.goal_creation_step = "initial_input"
+                st.session_state.clarification_messages = []
+                st.rerun()
+            
+            return
+    
     # Display conversation history
     for message in st.session_state.clarification_messages:
         if message["role"] == "agent":
@@ -158,55 +199,18 @@ def show_clarification_conversation():
         
         return
     
-    # Get next question from agent
-    try:
-        agent = GoalClarifierAgent()
-        
-        # Check if we need to ask more questions (limit to 3 questions max)
-        question_count = len([m for m in st.session_state.clarification_messages if m["role"] == "agent"])
-        max_questions = 3
-        
-        if question_count < max_questions:
-            # Generate next question via clarify_goal
-            with st.spinner("🤔 Thinking of the next question..."):
-                state = agent.clarify_goal(state)
-            
-            # Extract the last agent response
-            if state.get("conversation_history"):
-                last_message = state["conversation_history"][-1]
-                if last_message.get("role") == "assistant":
-                    question = last_message.get("content", "")
-                    
-                    # Add to conversation
-                    st.session_state.clarification_messages.append({
-                        "role": "agent",
-                        "content": question
-                    })
-                    
-                    st.rerun()
-        
-        # Check if max questions reached or clarification is complete
-        if question_count >= max_questions or state.get("clarification_complete"):
-            # Clarification complete
-            st.session_state.clarification_complete = True
-            st.session_state.goal_draft_state = state
-            st.rerun()
+    # Check if max question EXCHANGES (question + answer pairs) reached
+    # Only auto-complete if user has answered max_questions, not just if max questions were asked
+    answer_count = len([m for m in st.session_state.clarification_messages if m["role"] == "user"])
     
-    except Exception as e:
-        logger.error(f"Error in clarification: {e}")
-        st.error(f"An error occurred: {e}")
-        
-        if st.button("🔄 Retry"):
-            st.rerun()
-        
-        if st.button("← Start Over"):
-            st.session_state.goal_creation_step = "initial_input"
-            st.session_state.clarification_messages = []
-            st.rerun()
-        
+    if answer_count >= max_questions:
+        # Auto-complete if user has answered max questions
+        st.session_state.clarification_complete = True
+        st.session_state.goal_draft_state = state
+        st.rerun()
         return
     
-    # User input
+    # User input form - only show if not complete
     with st.form("clarification_answer_form", clear_on_submit=True):
         user_answer = st.text_input(
             "Your answer:",
@@ -217,32 +221,51 @@ def show_clarification_conversation():
         submitted = st.form_submit_button("Send ➡️")
         
         if submitted and user_answer:
-            # Add user response to conversation
-            st.session_state.clarification_messages.append({
-                "role": "user",
-                "content": user_answer
-            })
-            
-            # Update state with user answer and process through agent
-            state = st.session_state.goal_draft_state
-            agent = GoalClarifierAgent()
-            
-            with st.spinner("🤔 Processing your response..."):
+            try:
+                # Add user response to UI conversation
+                st.session_state.clarification_messages.append({
+                    "role": "user",
+                    "content": user_answer
+                })
+                
                 # Process answer through agent to get next question
-                state = agent.process_answer(state, user_answer)
+                state = st.session_state.goal_draft_state
+                
+                with st.spinner("🤔 Processing your response..."):
+                    state = agent.process_answer(state, user_answer)
+                
+                # Check if clarification is complete (agent returned completion JSON)
+                if state.get("clarification_complete"):
+                    st.session_state.clarification_complete = True
+                    st.session_state.goal_draft_state = state
+                    st.rerun()
+                    return
+                
+                # Extract and display the next question/response
+                if state.get("conversation_history"):
+                    last_message = state["conversation_history"][-1]
+                    if last_message.get("role") == "assistant":
+                        response = last_message.get("content", "")
+                        
+                        # Check if response contains completion JSON (agent finished early)
+                        if "clarification_complete" in response.lower():
+                            st.session_state.clarification_complete = True
+                        
+                        st.session_state.clarification_messages.append({
+                            "role": "agent",
+                            "content": response
+                        })
+                
+                # Save updated state
+                st.session_state.goal_draft_state = state
+                st.rerun()
             
-            # Extract and display the next question/response
-            if state.get("conversation_history"):
-                last_message = state["conversation_history"][-1]
-                if last_message.get("role") == "assistant":
-                    response = last_message.get("content", "")
-                    st.session_state.clarification_messages.append({
-                        "role": "agent",
-                        "content": response
-                    })
-            
-            st.session_state.goal_draft_state = state
-            st.rerun()
+            except Exception as e:
+                logger.error(f"Error processing answer: {e}")
+                st.error(f"An error occurred: {e}")
+                
+                if st.button("🔄 Retry"):
+                    st.rerun()
     
     # Skip button
     col1, col2 = st.columns([3, 1])

@@ -212,17 +212,78 @@ def mark_task_complete(task_id: int) -> bool:
 def get_performance_metrics(goal_id: int) -> Dict[str, Any]:
     """Get performance metrics for a goal"""
     try:
-        memory_manager = LearningMemoryManager()
-        metrics = memory_manager.get_performance_summary(goal_id)
-        return metrics
+        tasks = get_tasks_for_goal(goal_id)
+        
+        if not tasks:
+            return {
+                "completion_rate": 0.0,
+                "tasks_completed": 0,
+                "tasks_total": 0,
+                "average_completion_time": 0,
+                "min_completion_time": 0,
+                "max_completion_time": 0,
+                "consistency_score": 0,
+                "average_difficulty": 5.0,
+                "difficulty_match": "unknown"
+            }
+        
+        # Calculate metrics from actual tasks
+        completed_tasks = [t for t in tasks if t.get("is_completed")]
+        total_tasks = len(tasks)
+        completed_count = len(completed_tasks)
+        
+        # Completion rate
+        completion_rate = (completed_count / total_tasks * 100) if total_tasks > 0 else 0.0
+        
+        # Time metrics (using estimated_minutes as proxy for actual time)
+        if completed_tasks:
+            times = [t.get("estimated_minutes", 30) for t in completed_tasks]
+            avg_time = sum(times) / len(times)
+            min_time = min(times)
+            max_time = max(times)
+        else:
+            avg_time = 0
+            min_time = 0
+            max_time = 0
+        
+        # Difficulty metrics
+        all_difficulties = [t.get("difficulty_score", 5) for t in tasks]
+        avg_difficulty = sum(all_difficulties) / len(all_difficulties) if all_difficulties else 5.0
+        
+        # Determine difficulty match
+        if avg_difficulty < 4:
+            difficulty_match = "too_easy"
+        elif avg_difficulty > 7:
+            difficulty_match = "too_hard"
+        else:
+            difficulty_match = "appropriate"
+        
+        # Consistency score (based on completion pattern)
+        # Simple heuristic: completed_count / total_tasks
+        consistency_score = completion_rate / 100.0 if total_tasks > 0 else 0.0
+        
+        return {
+            "completion_rate": completion_rate,
+            "tasks_completed": completed_count,
+            "tasks_total": total_tasks,
+            "average_completion_time": avg_time,
+            "min_completion_time": min_time,
+            "max_completion_time": max_time,
+            "consistency_score": consistency_score,
+            "average_difficulty": avg_difficulty,
+            "difficulty_match": difficulty_match
+        }
     except Exception as e:
-        logger.error(f"Error getting performance metrics: {e}")
+        logger.error(f"Error getting performance metrics: {e}", exc_info=True)
         return {
             "completion_rate": 0.0,
             "tasks_completed": 0,
             "tasks_total": 0,
             "average_completion_time": 0,
+            "min_completion_time": 0,
+            "max_completion_time": 0,
             "consistency_score": 0,
+            "average_difficulty": 5.0,
             "difficulty_match": "unknown"
         }
 
@@ -300,7 +361,12 @@ def get_current_state() -> AppState:
         state["goal_id"] = goal["id"]
         
         if roadmap:
-            state["roadmap"] = roadmap["modules"]
+            # Store full roadmap structure (not just modules)
+            state["roadmap"] = {
+                "modules": roadmap.get("modules", []),
+                "total_weeks": roadmap.get("total_weeks") or roadmap.get("estimated_weeks"),
+                "milestones": roadmap.get("milestones", [])
+            }
         
         if tasks:
             state["tasks"] = tasks

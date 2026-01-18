@@ -10,6 +10,7 @@ from src.llm.config import get_llm, invoke_llm
 from src.llm.prompts import GOAL_CLARIFIER_SYSTEM_PROMPT
 from src.database import db_manager, ConversationCRUD
 from src.utils.logger import get_logger
+from src.utils.goal_enrichment import enrich_goal_text
 
 logger = get_logger(__name__)
 
@@ -156,6 +157,22 @@ class GoalClarifierAgent:
                     f"[GoalClarifierAgent] Clarification complete - "
                     f"style: {state['learning_style']}, pace: {state['pace']}"
                 )
+                
+                # CRITICAL: Enrich goal_text with clarified preferences
+                # This ensures the content curator receives full context
+                original_goal_text = state.get("goal_text", "")
+                enriched_goal_text = enrich_goal_text(state)
+                
+                # Store original for reference
+                if "original_goal_text" not in state:
+                    state["original_goal_text"] = original_goal_text
+                
+                # Update with enriched version for downstream agents
+                state["goal_text"] = enriched_goal_text
+                
+                logger.info("[GoalClarifierAgent] ✓ Goal text enriched with user preferences")
+                logger.info(f"[GoalClarifierAgent] Original: {original_goal_text[:60]}...")
+                logger.info(f"[GoalClarifierAgent] Enriched: {enriched_goal_text[:100]}...")
             
             # Store conversation in database if goal_id exists
             if state.get("goal_id"):

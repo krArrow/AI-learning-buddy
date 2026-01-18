@@ -200,20 +200,59 @@ def show_modules_detail(roadmap: Dict):
                 resources = module['resources']
                 
                 if isinstance(resources, list):
-                    for resource in resources[:5]:  # Show max 5
+                    for idx_res, resource in enumerate(resources[:10], 1):  # Show max 10 resources
                         if isinstance(resource, dict):
                             title = resource.get('title', 'Resource')
                             url = resource.get('url', resource.get('link', ''))
                             res_type = resource.get('type', resource.get('resource_type', 'resource'))
+                            platform = resource.get('platform', 'Unknown')
+                            description = resource.get('description', '')
+                            difficulty = resource.get('difficulty', None)
+                            estimated_hours = resource.get('estimated_hours', None)
+                            combined_score = resource.get('combined_score', None)
                             emoji = get_resource_emoji(res_type)
                             
-                            # Create clickable link if URL exists
-                            if url and url.startswith('http'):
-                                st.markdown(f"{emoji} [{title}]({url}) - _{res_type}_")
-                            else:
-                                st.markdown(f"{emoji} **{title}** - _{res_type}_")
+                            # Create a nice card-like display for each resource
+                            with st.container():
+                                # Title with link
+                                if url and url.startswith('http'):
+                                    st.markdown(f"**{idx_res}.** {emoji} [{title}]({url})")
+                                else:
+                                    st.markdown(f"**{idx_res}.** {emoji} **{title}**")
+                                
+                                # Resource metadata in columns
+                                meta_cols = st.columns([1, 1, 1, 1])
+                                
+                                with meta_cols[0]:
+                                    st.caption(f"📦 Type: {res_type.title()}")
+                                
+                                with meta_cols[1]:
+                                    st.caption(f"🌐 Platform: {platform}")
+                                
+                                with meta_cols[2]:
+                                    if estimated_hours:
+                                        st.caption(f"⏱️ Est. Hours: {estimated_hours}")
+                                    else:
+                                        st.caption(f"⏱️ Duration: N/A")
+                                
+                                with meta_cols[3]:
+                                    if difficulty is not None:
+                                        difficulty_level = "Easy" if difficulty < 0.3 else "Medium" if difficulty < 0.6 else "Hard"
+                                        st.caption(f"📊 Difficulty: {difficulty_level}")
+                                    else:
+                                        st.caption(f"📊 Difficulty: N/A")
+                                
+                                # Description
+                                if description:
+                                    st.caption(f"💡 {description}")
+                                
+                                # Show match score if available
+                                if combined_score is not None:
+                                    st.progress(combined_score, text=f"Match Score: {combined_score*100:.0f}%")
+                                
+                                st.markdown("")  # Add spacing
                         elif isinstance(resource, str):
-                            st.write(f"📌 {resource}")
+                            st.write(f"📌 {idx_res}. {resource}")
                 else:
                     st.write(f"📌 {resources}")
             

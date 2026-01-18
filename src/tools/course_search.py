@@ -328,12 +328,28 @@ def course_search(
         >>> print(resources[0]['title'])
         'Python for Everybody Specialization'
     """
-    logger.info(f"Searching for resources: query='{query}', style={learning_style}, level={level}")
+    logger.info("="*80)
+    logger.info("[RESOURCE FETCH START] Initiating internet resource search")
+    logger.info(f"[RESOURCE FETCH] Query: '{query}'")
+    logger.info(f"[RESOURCE FETCH] Learning Style: {learning_style}")
+    logger.info(f"[RESOURCE FETCH] Level: {level}")
+    logger.info(f"[RESOURCE FETCH] Max Results: {max_results}")
+    logger.info("="*80)
+    
+    # In production, these would be actual API calls
+    logger.info("[RESOURCE FETCH] NOTE: Using mock data - In production would query:")
+    logger.info("[RESOURCE FETCH]   - Udemy API (udemy.com/api-2.0/courses)")
+    logger.info("[RESOURCE FETCH]   - Coursera API (coursera.org/api/courses)")
+    logger.info("[RESOURCE FETCH]   - YouTube Data API (youtube.googleapis.com/youtube/v3)")
+    logger.info("[RESOURCE FETCH]   - GitHub API (api.github.com/search/repositories)")
+    logger.info("[RESOURCE FETCH]   - Web scraping services for free resources")
     
     # Extract key topics from query
     query_lower = query.lower()
     relevant_resources = []
     matched_topics = []
+    
+    logger.info(f"[RESOURCE FETCH] Analyzing query: '{query_lower}'")
     
     # Enhanced topic-to-keyword mapping for better matching
     topic_keywords = {
@@ -345,9 +361,14 @@ def course_search(
         "language": ["language", "learn language", "fluent", "fluency", "bilingual", "multilingual", "vocabulary", "grammar"],
     }
     
+    logger.info(f"[RESOURCE FETCH] Available topic categories: {list(topic_keywords.keys())}")
+    
     # Search mock database with improved fuzzy keyword matching
+    logger.info("[RESOURCE FETCH] Starting topic matching process...")
+    
     for topic, resources in MOCK_RESOURCES.items():
         topic_matched = False
+        match_method = None
         
         # Direct topic match
         if topic in query_lower:
@@ -355,6 +376,8 @@ def course_search(
                 matched_topics.append(topic)
             relevant_resources.extend(resources)
             topic_matched = True
+            match_method = "direct_match"
+            logger.info(f"[RESOURCE FETCH] ✓ Direct match found: '{topic}' ({len(resources)} resources)")
             continue
         
         # Check topic keywords for this category
@@ -365,6 +388,8 @@ def course_search(
                         matched_topics.append(topic)
                     relevant_resources.extend(resources)
                     topic_matched = True
+                    match_method = f"keyword_match: '{keyword}'"
+                    logger.info(f"[RESOURCE FETCH] ✓ Keyword match found: '{topic}' via keyword '{keyword}' ({len(resources)} resources)")
                     break
         
         # If not matched yet, check word-by-word similarity
@@ -379,8 +404,11 @@ def course_search(
                     matched_topics.append(topic)
                 relevant_resources.extend(resources)
                 topic_matched = True
+                match_method = f"word_overlap: {overlap}"
+                logger.info(f"[RESOURCE FETCH] ✓ Word overlap match: '{topic}' with words {overlap} ({len(resources)} resources)")
     
     # Remove duplicates while preserving order
+    logger.info(f"[RESOURCE FETCH] Removing duplicates from {len(relevant_resources)} resources...")
     seen = set()
     unique_resources = []
     for resource in relevant_resources:
@@ -390,53 +418,92 @@ def course_search(
             unique_resources.append(resource)
     
     relevant_resources = unique_resources
+    logger.info(f"[RESOURCE FETCH] After deduplication: {len(relevant_resources)} unique resources")
     
     # Enhanced fallback matching with better logic
     if not relevant_resources:
-        logger.warning(f"No direct match found for query: '{query}'. Using intelligent fallback matching.")
+        logger.warning("="*80)
+        logger.warning(f"[RESOURCE FETCH] ⚠ No direct match found for query: '{query}'")
+        logger.warning(f"[RESOURCE FETCH] Initiating intelligent fallback matching...")
+        logger.warning("="*80)
         
         # Language learning detection
-        language_keywords = ["spanish", "french", "german", "italian", "chinese", "japanese", "language", "fluent", "vocabulary", "grammar", "conversation"]
-        if any(word in query_lower for word in language_keywords):
-            logger.info(f"[course_search] Detected language learning goal. Matching to language resources.")
+        language_keywords = ["spanish", "french", "german", "italian", "chinese", "japanese", "language", "fluent", "vocabulary", "grammar", "conversation", "speak", "speaking"]
+        detected_language_keywords = [word for word in language_keywords if word in query_lower]
+        
+        if detected_language_keywords:
+            logger.info(f"[RESOURCE FETCH] 🌐 Detected language learning goal via keywords: {detected_language_keywords}")
+            logger.info(f"[RESOURCE FETCH] Fetching language-specific resources...")
+            
             if any(word in query_lower for word in ["spanish", "español"]):
-                relevant_resources.extend(MOCK_RESOURCES.get("spanish", []))
-            relevant_resources.extend(MOCK_RESOURCES.get("language", []))
-            matched_topics.extend(["spanish", "language"])
+                spanish_resources = MOCK_RESOURCES.get("spanish", [])
+                relevant_resources.extend(spanish_resources)
+                matched_topics.append("spanish")
+                logger.info(f"[RESOURCE FETCH]   → Added {len(spanish_resources)} Spanish resources")
+            
+            language_resources = MOCK_RESOURCES.get("language", [])
+            relevant_resources.extend(language_resources)
+            matched_topics.append("language")
+            logger.info(f"[RESOURCE FETCH]   → Added {len(language_resources)} general language resources")
         
         # Data science / ML detection
-        elif any(word in query_lower for word in ["data", "ai", "artificial", "machine", "neural", "model", "deep learning"]):
-            logger.info(f"[course_search] Detected ML/AI goal. Matching to ML resources.")
-            relevant_resources.extend(MOCK_RESOURCES.get("machine learning", []))
+        elif any(word in query_lower for word in ["data", "ai", "artificial", "machine", "neural", "model", "deep learning", "ml", "prediction", "classification"]):
+            detected_ml_keywords = [word for word in ["data", "ai", "artificial", "machine", "neural", "model", "deep learning", "ml"] if word in query_lower]
+            logger.info(f"[RESOURCE FETCH] 🤖 Detected ML/AI goal via keywords: {detected_ml_keywords}")
+            ml_resources = MOCK_RESOURCES.get("machine learning", [])
+            relevant_resources.extend(ml_resources)
             matched_topics.append("machine learning")
+            logger.info(f"[RESOURCE FETCH]   → Added {len(ml_resources)} ML/AI resources")
         
         # Web development detection
-        elif any(word in query_lower for word in ["web", "website", "frontend", "backend", "react", "javascript", "html", "css"]):
-            logger.info(f"[course_search] Detected web development goal.")
+        elif any(word in query_lower for word in ["web", "website", "frontend", "backend", "react", "javascript", "html", "css", "browser"]):
+            detected_web_keywords = [word for word in ["web", "website", "frontend", "backend", "react", "javascript", "html", "css"] if word in query_lower]
+            logger.info(f"[RESOURCE FETCH] 🌐 Detected web development goal via keywords: {detected_web_keywords}")
+            
             if "react" in query_lower:
-                relevant_resources.extend(MOCK_RESOURCES.get("react", []))
+                react_resources = MOCK_RESOURCES.get("react", [])
+                relevant_resources.extend(react_resources)
                 matched_topics.append("react")
+                logger.info(f"[RESOURCE FETCH]   → Added {len(react_resources)} React resources")
+            
             if any(word in query_lower for word in ["javascript", "js", "web"]):
-                relevant_resources.extend(MOCK_RESOURCES.get("javascript", []))
+                js_resources = MOCK_RESOURCES.get("javascript", [])
+                relevant_resources.extend(js_resources)
                 matched_topics.append("javascript")
+                logger.info(f"[RESOURCE FETCH]   → Added {len(js_resources)} JavaScript resources")
         
         # General programming - only if nothing else matched
-        elif any(word in query_lower for word in ["programming", "code", "coding", "software", "developer"]):
-            logger.info(f"[course_search] Detected general programming goal. Defaulting to Python.")
-            relevant_resources.extend(MOCK_RESOURCES.get("python", []))
+        elif any(word in query_lower for word in ["programming", "code", "coding", "software", "developer", "program"]):
+            detected_prog_keywords = [word for word in ["programming", "code", "coding", "software", "developer"] if word in query_lower]
+            logger.info(f"[RESOURCE FETCH] 💻 Detected general programming goal via keywords: {detected_prog_keywords}")
+            logger.info(f"[RESOURCE FETCH] Defaulting to Python resources as the most beginner-friendly option")
+            python_resources = MOCK_RESOURCES.get("python", [])
+            relevant_resources.extend(python_resources)
             matched_topics.append("python")
+            logger.info(f"[RESOURCE FETCH]   → Added {len(python_resources)} Python resources")
         
         # Last resort: return nothing rather than incorrect resources
         else:
-            logger.warning(f"[course_search] Could not match query to any topic category. Returning empty results.")
+            logger.error("="*80)
+            logger.error(f"[RESOURCE FETCH] ❌ Could not match query '{query}' to any topic category")
+            logger.error(f"[RESOURCE FETCH] Query words: {query_lower.split()}")
+            logger.error(f"[RESOURCE FETCH] Available categories: {list(MOCK_RESOURCES.keys())}")
+            logger.error(f"[RESOURCE FETCH] Returning empty results to avoid incorrect recommendations")
+            logger.error("="*80)
             # Don't return any resources if we can't match properly
             relevant_resources = []
     
-    logger.info(f"[course_search] Matched topics: {matched_topics}. Found {len(relevant_resources)} resources")
+    if matched_topics:
+        logger.info("="*80)
+        logger.info(f"[RESOURCE FETCH] ✓ Successfully matched topics: {matched_topics}")
+        logger.info(f"[RESOURCE FETCH] Total resources found: {len(relevant_resources)}")
+        logger.info("="*80)
     
     # Calculate scores for each resource
+    logger.info("[RESOURCE FETCH] Calculating relevance and learning style scores...")
     scored_resources = []
-    for resource in relevant_resources:
+    
+    for i, resource in enumerate(relevant_resources, 1):
         resource_copy = resource.copy()
         
         # Calculate relevance score
@@ -453,26 +520,43 @@ def course_search(
         else:
             resource_copy["learning_style_match"] = 0.5
         
-        # Combined score (weighted)
+        # Combined score (weighted: 70% relevance, 30% learning style)
         resource_copy["combined_score"] = (
             0.7 * relevance + 0.3 * resource_copy["learning_style_match"]
+        )
+        
+        logger.debug(
+            f"[RESOURCE FETCH] Resource {i}: '{resource['title'][:50]}...' | "
+            f"Relevance: {relevance:.2f}, Style Match: {resource_copy['learning_style_match']:.2f}, "
+            f"Combined: {resource_copy['combined_score']:.2f}"
         )
         
         scored_resources.append(resource_copy)
     
     # Sort by combined score
+    logger.info("[RESOURCE FETCH] Ranking resources by combined score...")
     scored_resources.sort(key=lambda x: x["combined_score"], reverse=True)
     
     # Return top results
     results = scored_resources[:max_results]
     
-    logger.info(f"Found {len(results)} resources for query: {query}")
-    for i, resource in enumerate(results[:3], 1):
-        logger.debug(
-            f"  {i}. {resource['title']} "
-            f"(relevance={resource['relevance_score']:.2f}, "
-            f"style_match={resource['learning_style_match']:.2f})"
-        )
+    logger.info("="*80)
+    logger.info(f"[RESOURCE FETCH] ✓ FINAL RESULTS: {len(results)} resources selected (from {len(scored_resources)} candidates)")
+    logger.info("="*80)
+    
+    # Log detailed information about top resources
+    for i, resource in enumerate(results, 1):
+        logger.info(f"[RESOURCE FETCH] #{i} - {resource['title']}")
+        logger.info(f"         URL: {resource.get('url', 'N/A')}")
+        logger.info(f"         Type: {resource.get('type', 'unknown')} | Platform: {resource.get('platform', 'N/A')}")
+        logger.info(f"         Difficulty: {resource.get('difficulty', 0):.1f} | Est. Hours: {resource.get('estimated_hours', 'N/A')}")
+        logger.info(f"         Relevance: {resource['relevance_score']:.2f} | Style Match: {resource['learning_style_match']:.2f} | Combined: {resource['combined_score']:.2f}")
+        logger.info(f"         Description: {resource.get('description', 'N/A')[:80]}")
+        logger.info("-" * 80)
+    
+    logger.info("="*80)
+    logger.info("[RESOURCE FETCH END] Resource fetching complete")
+    logger.info("="*80)
     
     return results
 

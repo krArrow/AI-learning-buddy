@@ -12,6 +12,7 @@ from src.agents.goal_clarifier import GoalClarifierAgent
 from src.llm.config import LLMConfig
 from src.ui.utils import run_graph_execution
 from src.utils.logger import get_logger
+from src.utils.goal_enrichment import estimate_goal_hours, calculate_eta
 
 logger = get_logger(__name__)
 
@@ -84,6 +85,29 @@ def show_initial_input():
                 help="How much time can you dedicate each day?"
             )
         
+        # Target completion time
+        st.markdown("### 🎯 Your Goal Timeline")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            target_number = st.number_input(
+                "I want to complete this in:",
+                min_value=1,
+                max_value=365,
+                value=30,
+                step=1,
+                help="How long do you want to take to achieve this goal?"
+            )
+        
+        with col4:
+            target_unit = st.selectbox(
+                "Time Unit",
+                ["Days", "Weeks", "Months"],
+                index=1,  # Default to Weeks
+                help="Select the time unit"
+            )
+        
         st.markdown("---")
         
         # Optional preferences
@@ -109,6 +133,14 @@ def show_initial_input():
                 st.error("Please provide a more detailed learning goal (at least 10 characters)")
                 return
             
+            # Calculate target completion in days
+            if target_unit == "Days":
+                target_days = target_number
+            elif target_unit == "Weeks":
+                target_days = target_number * 7
+            else:  # Months
+                target_days = target_number * 30
+            
             # Create initial state
             state = create_initial_state(
                 goal_text=goal_text.strip(),
@@ -117,6 +149,10 @@ def show_initial_input():
                 learning_style=None if learning_style == "Not sure" else learning_style.lower().replace("/", "_"),
                 pace=None if pace == "Not sure" else pace.lower()
             )
+            
+            # Add target completion days to state
+            state["target_completion_days"] = target_days
+            state["target_display"] = f"{target_number} {target_unit}"
             
             st.session_state.goal_draft_state = state
             st.session_state.goal_creation_step = "clarification"
@@ -276,10 +312,9 @@ def show_clarification_conversation():
 
 
 def show_confirmation():
-    """Show confirmation of extracted preferences"""
+    """Show confirmation of user preferences"""
     
-    st.markdown("### Step 3: Review Your Preferences")
-    st.write("Please review the learning plan preferences we've identified:")
+    st.markdown("### 🎯 Review Your Learning Plan")
     
     state = st.session_state.goal_draft_state
     
@@ -287,12 +322,36 @@ def show_confirmation():
         st.error("State not found")
         return
     
-    # Display preferences in cards
+    # Display target timeline prominently
+    target_display = state.get("target_display", "Not specified")
+    target_days = state.get("target_completion_days", 0)
+    daily_minutes = state.get("daily_minutes", 60)
+    
+    st.markdown(f"### 📅 Your Timeline: **{target_display}**")
+    
+    timeline_col1, timeline_col2 = st.columns(2)
+    
+    with timeline_col1:
+        daily_hours = daily_minutes / 60
+        st.info(f"⏱️ **Daily Commitment:** {daily_hours:.1f} hour(s) per day")
+    
+    with timeline_col2:
+        st.info(f"🎯 **Target Completion:** {target_display}")
+    
+    st.caption(f"💡 Your plan will be tailored to complete your goal within {target_display} at {daily_hours:.1f} hours/day")
+    
+    st.markdown("---")
+    
+    # Display preferences
+    st.markdown("### 📚 Your Preferences")
+    
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("#### 📝 Learning Goal")
-        st.info(state["goal_text"])
+        # Show original goal (not enriched version)
+        display_goal = state.get("original_goal_text", state.get("goal_text", ""))
+        st.info(display_goal)
         
         st.markdown("#### 📊 Level")
         st.info(state["level"].title())
@@ -303,18 +362,22 @@ def show_confirmation():
     with col2:
         st.markdown("#### 🎨 Learning Style")
         style = state.get("learning_style", "Not specified")
-        st.info(style.title() if style else "Visual (default)")
+        st.info(style.replace("_", "/").title() if style and style != "Not specified" else "Visual (default)")
         
         st.markdown("#### 🚀 Pace")
         pace = state.get("pace", "Not specified")
-        st.info(pace.title() if pace else "Moderate (default)")
+        st.info(pace.title() if pace and pace != "Not specified" else "Moderate (default)")
         
-        st.markdown("#### 📚 Preferences")
+        st.markdown("#### 📚 Additional Preferences")
         preferences = state.get("preferences", {})
-        if preferences and isinstance(preferences, dict):
+        if preferences and isinstance(preferences, dict) and len(preferences) > 0:
             # Display preferences from dictionary
-            for key, value in list(preferences.items())[:3]:
-                st.caption(f"• {key}: {value}")
+            pref_items = [(k, v) for k, v in preferences.items() if v]
+            if pref_items:
+                for key, value in pref_items[:3]:
+                    st.caption(f"• {key.replace('_', ' ').title()}: {value}")
+            else:
+                st.caption("• No specific preferences")
         elif preferences and isinstance(preferences, str):
             # Handle string format (backward compatibility)
             for pref in preferences.split(",")[:3]:

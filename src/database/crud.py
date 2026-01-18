@@ -28,9 +28,11 @@ class LearningGoalCRUD:
         daily_minutes: int,
         learning_style: Optional[str] = None,
         pace: Optional[str] = None,
-        preferences: Optional[Dict[str, Any]] = None
+        preferences: Optional[Dict[str, Any]] = None,
+        target_completion_days: Optional[int] = None,
+        target_display_text: Optional[str] = None
     ) -> LearningGoal:
-        """Create a new learning goal."""
+        """Create a new learning goal with target completion timeline."""
         try:
             # Deactivate existing active goals
             session.query(LearningGoal).filter(
@@ -44,12 +46,14 @@ class LearningGoalCRUD:
                 learning_style=learning_style or "visual",
                 pace=pace or "medium",
                 preferences=preferences or {},
+                target_completion_days=target_completion_days,
+                target_display_text=target_display_text,
                 is_active=True
             )
             session.add(goal)
             session.commit()
             session.refresh(goal)
-            logger.info(f"Created learning goal: {goal.id}")
+            logger.info(f"Created learning goal: {goal.id} with target: {target_display_text}")
             return goal
         except Exception as e:
             session.rollback()

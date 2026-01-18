@@ -43,6 +43,19 @@ class LearningGoal(Base):
         comment="slow, medium, or fast"
     )
     preferences: Mapped[Optional[Dict[str, Any]]] = Column(JSON, nullable=True, default=dict)
+    
+    # User's Target Completion Timeline
+    target_completion_days: Mapped[Optional[int]] = Column(
+        Integer,
+        nullable=True,
+        comment="User's target days to complete the goal"
+    )
+    target_display_text: Mapped[Optional[str]] = Column(
+        String(100),
+        nullable=True,
+        comment="Human-readable target (e.g., '30 Days', '3 Months')"
+    )
+    
     created_at: Mapped[datetime] = Column(
         DateTime, 
         nullable=False, 

@@ -65,29 +65,32 @@ class GoalClarifierAgent:
             if len(conversation) == 0:
                 logger.info("[GoalClarifierAgent] Starting new conversation")
                 
+                # Get user profile
+                user_profile = state.get("user_profile", {})
+                
                 # Build comprehensive initial context with all pre-filled information
                 context_parts = [f"I want to {state['goal_text']}"]
                 
                 # Add level if provided
-                if state.get('level'):
-                    context_parts.append(f"My current level is {state['level']}")
+                if user_profile.get('level'):
+                    context_parts.append(f"My current level is {user_profile['level']}")
                 
                 # Add daily time commitment
-                if state.get('daily_minutes'):
-                    context_parts.append(f"I can dedicate {state['daily_minutes']} minutes per day")
+                if user_profile.get('daily_minutes'):
+                    context_parts.append(f"I can dedicate {user_profile['daily_minutes']} minutes per day")
                 
                 # Add learning style if already selected
-                if state.get('learning_style'):
-                    style_display = state['learning_style'].replace('_', '/').title()
+                if user_profile.get('learning_style'):
+                    style_display = user_profile['learning_style'].replace('_', '/').title()
                     context_parts.append(f"My preferred learning style is {style_display}")
                 
                 # Add pace if already selected
-                if state.get('pace'):
-                    context_parts.append(f"I prefer a {state['pace']} learning pace")
+                if user_profile.get('pace'):
+                    context_parts.append(f"I prefer a {user_profile['pace']} learning pace")
                 
                 # Add any additional preferences
-                if state.get('preferences') and isinstance(state['preferences'], dict):
-                    for key, value in state['preferences'].items():
+                if user_profile.get('preferences') and isinstance(user_profile['preferences'], dict):
+                    for key, value in user_profile['preferences'].items():
                         if value:
                             context_parts.append(f"{key}: {value}")
                 
@@ -147,15 +150,15 @@ class GoalClarifierAgent:
             if clarification_complete and extracted_data:
                 # Update state with extracted information
                 if "learning_style" in extracted_data:
-                    state["learning_style"] = extracted_data["learning_style"]
+                    state["user_profile"]["learning_style"] = extracted_data["learning_style"]
                 if "pace" in extracted_data:
-                    state["pace"] = extracted_data["pace"]
+                    state["user_profile"]["pace"] = extracted_data["pace"]
                 if "preferences" in extracted_data:
-                    state["preferences"].update(extracted_data["preferences"])
+                    state["user_profile"]["preferences"].update(extracted_data["preferences"])
                 
                 logger.info(
                     f"[GoalClarifierAgent] Clarification complete - "
-                    f"style: {state['learning_style']}, pace: {state['pace']}"
+                    f"style: {state['user_profile']['learning_style']}, pace: {state['user_profile']['pace']}"
                 )
                 
                 # CRITICAL: Enrich goal_text with clarified preferences

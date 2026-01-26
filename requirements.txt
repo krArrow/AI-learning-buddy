@@ -73,6 +73,9 @@ numpy
 requests
 httpx
 
+# Content Search
+tavily-python
+
 # Testing
 pytest
 pytest-asyncio

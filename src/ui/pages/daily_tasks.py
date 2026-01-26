@@ -6,6 +6,7 @@ Day 5: Display current task, resources, and track completion
 import streamlit as st
 from typing import Dict, Optional
 import json
+import time
 
 from src.ui.utils import (
     get_active_goal, get_tasks_for_goal, get_current_task,
@@ -43,8 +44,16 @@ def show():
                 st.rerun()
             return
         
-        # Get tasks
-        tasks = get_tasks_for_goal(goal["id"])
+        # Get tasks - try module_tasks format first (new 4-phase flow)
+        state = get_current_state()
+        
+        # Convert module tasks to displayable format
+        if state.get("module_tasks") and state.get("populated_roadmap"):
+            from src.ui.utils import convert_module_tasks_to_display_format
+            tasks = convert_module_tasks_to_display_format(state)
+        else:
+            # Fall back to old task table format
+            tasks = get_tasks_for_goal(goal["id"])
         
         if not tasks:
             st.warning("📋 No tasks have been generated yet.")
@@ -91,27 +100,43 @@ def show():
 def show_current_task(task: Dict, all_tasks: list):
     """Display the current task to complete"""
     
-    st.markdown(f"### 📝 Day {task['day_number']} Task")
+    # Handle both old and new task formats
+    day_num = task.get('day_number', task.get('day', 1))
+    task_title = task.get('task_text', task.get('task_title', 'Task'))
+    why_text = task.get('why_text', task.get('task_description', ''))
+    estimated = task.get('estimated_minutes', 30)
+    difficulty = task.get('difficulty_score', task.get('difficulty', 5))
+    resources = task.get('resources', [])
+    
+    st.markdown(f"### 📝 Day {day_num} Task")
     
     # Task header
-    st.markdown(f"## {task['task_text']}")
+    st.markdown(f"## {task_title}")
+    
+    # Module context (if available in new format)
+    if 'module_title' in task:
+        st.caption(f"📚 Module: {task['module_title']}")
     
     # Metadata row
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Day", task['day_number'])
+        st.metric("Day", day_num)
     
     with col2:
-        difficulty = task.get('difficulty_score', 5)
-        st.metric("Difficulty", f"{difficulty}/10")
+        difficulty_val = difficulty if isinstance(difficulty, (int, float)) else 5
+        if difficulty_val > 1:
+            st.metric("Difficulty", f"{difficulty_val}/10")
+        else:
+            # 0-1 scale (from new format)
+            difficulty_pct = int(difficulty_val * 10)
+            st.metric("Difficulty", f"{difficulty_pct}/10")
     
     with col3:
-        estimated = task.get('estimated_minutes', 30)
-        st.metric("Time", format_duration(estimated))
+        st.metric("Time", format_duration(int(estimated)))
     
     with col4:
-        completed = sum(1 for t in all_tasks if t['is_completed'])
+        completed = sum(1 for t in all_tasks if t.get('is_completed') or (isinstance(t, dict) and 'completed_at' in t and t['completed_at']))
         total = len(all_tasks)
         st.metric("Progress", f"{completed}/{total}")
     
@@ -119,12 +144,12 @@ def show_current_task(task: Dict, all_tasks: list):
     
     # Why this task?
     st.markdown("### 🎯 Why This Task?")
-    st.info(task['why_text'])
+    st.info(why_text if why_text else "This task builds on your previous learning and moves you toward your goal.")
     
     st.markdown("---")
     
     # Resources
-    show_task_resources(task)
+    show_task_resources(task, resources)
     
     st.markdown("---")
     
@@ -142,7 +167,10 @@ def show_task_resources(task: Dict):
     
     st.markdown("### 📚 Learning Resources")
     
+    # Handle both old and new resource formats
     resources = task.get('resources', [])
+    if not resources:
+        resources = task.get('resources_used', [])
     
     if isinstance(resources, str):
         try:
@@ -208,29 +236,46 @@ def show_task_actions(task: Dict, all_tasks: list):
     
     with col1:
         if st.button("✅ Mark as Complete", width='stretch', type="primary"):
-            success = mark_task_complete(task['id'])
+            # Get task ID (handle both formats)
+            task_id = task.get('id', task.get('task_id'))
             
-            if success:
-                st.session_state.last_completed_task = task
-                st.success("🎉 Great job! Task completed!")
-                st.balloons()
+            if not task_id:
+                st.error("Cannot mark task complete: no task ID found")
+                return
+            
+            try:
+                # Update in database
+                success = mark_task_complete(task_id)
                 
-                # Check if this was the last task
-                remaining = [t for t in all_tasks if not t['is_completed'] and t['id'] != task['id']]
-                
-                if not remaining:
-                    st.info("🏆 You've completed all tasks! Time to generate more.")
-                
-                st.rerun()
-            else:
-                st.error("Failed to mark task as complete. Please try again.")
+                if success:
+                    st.session_state.last_completed_task = task
+                    st.success("🎉 Great job! Task completed!")
+                    st.balloons()
+                    
+                    # Check if this was the last task
+                    remaining = [
+                        t for t in all_tasks 
+                        if not (t.get('is_completed') or t.get('completed_at'))
+                        and t.get('id') != task_id
+                    ]
+                    
+                    if not remaining:
+                        st.info("🏆 You've completed all tasks! Time to generate more.")
+                    
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Failed to mark task as complete. Please try again.")
+            
+            except Exception as e:
+                logger.error(f"Error marking task complete: {e}")
+                st.error(f"Error: {e}")
     
     with col2:
         if st.button("⏭️ Skip for Now", width='stretch'):
             st.warning("Task skipped. It will remain in your task list.")
             st.info("💡 Consider coming back to this task later for complete learning.")
             
-            # Move to next task (just refresh)
             if st.button("Continue to Next Task →"):
                 st.rerun()
     

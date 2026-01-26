@@ -112,18 +112,23 @@ def show_active_goal_dashboard(goal: dict):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Level", goal["level"].title())
+        user_profile = goal.get("user_profile", {})
+        level = user_profile.get("level", "Not specified")
+        st.metric("Level", level.title() if level else "Not specified")
     
     with col2:
-        st.metric("Daily Time", format_duration(goal["daily_minutes"]))
+        daily_minutes = user_profile.get("daily_minutes", 60)
+        st.metric("Daily Time", format_duration(daily_minutes))
     
     with col3:
-        if goal.get("learning_style"):
-            st.metric("Style", goal["learning_style"].title())
+        learning_style = user_profile.get("learning_style")
+        if learning_style:
+            st.metric("Style", learning_style.replace("_", "/").title())
     
     with col4:
-        if goal.get("pace"):
-            st.metric("Pace", goal["pace"].title())
+        pace = user_profile.get("pace")
+        if pace:
+            st.metric("Pace", pace.title())
     
     st.markdown("---")
     

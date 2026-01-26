@@ -45,6 +45,9 @@ def show():
     elif st.session_state.goal_creation_step == "confirmation":
         show_confirmation()
     
+    elif st.session_state.goal_creation_step == "roadmap_review":
+        show_roadmap_review()
+    
     elif st.session_state.goal_creation_step == "generating":
         show_generation_progress()
 
@@ -141,17 +144,17 @@ def show_initial_input():
             else:  # Months
                 target_days = target_number * 30
             
-            # Create initial state
+            # Create initial state with timeline included
             state = create_initial_state(
                 goal_text=goal_text.strip(),
                 level=level.lower(),
                 daily_minutes=daily_minutes,
                 learning_style=None if learning_style == "Not sure" else learning_style.lower().replace("/", "_"),
-                pace=None if pace == "Not sure" else pace.lower()
+                pace=None if pace == "Not sure" else pace.lower(),
+                target_completion_days=target_days  # Pass timeline directly
             )
             
-            # Add target completion days to state
-            state["target_completion_days"] = target_days
+            # Add display text for UI (convenience field)
             state["target_display"] = f"{target_number} {target_unit}"
             
             st.session_state.goal_draft_state = state
@@ -354,22 +357,25 @@ def show_confirmation():
         st.info(display_goal)
         
         st.markdown("#### 📊 Level")
-        st.info(state["level"].title())
+        user_profile = state.get("user_profile", {})
+        level = user_profile.get("level", "Not specified")
+        st.info(level.title() if level else "Not specified")
         
         st.markdown("#### ⏱️ Daily Time")
-        st.info(f"{state['daily_minutes']} minutes")
+        daily_minutes = user_profile.get("daily_minutes", 60)
+        st.info(f"{daily_minutes} minutes")
     
     with col2:
         st.markdown("#### 🎨 Learning Style")
-        style = state.get("learning_style", "Not specified")
+        style = user_profile.get("learning_style", "Not specified")
         st.info(style.replace("_", "/").title() if style and style != "Not specified" else "Visual (default)")
         
         st.markdown("#### 🚀 Pace")
-        pace = state.get("pace", "Not specified")
+        pace = user_profile.get("pace", "Not specified")
         st.info(pace.title() if pace and pace != "Not specified" else "Moderate (default)")
         
         st.markdown("#### 📚 Additional Preferences")
-        preferences = state.get("preferences", {})
+        preferences = user_profile.get("preferences", {})
         if preferences and isinstance(preferences, dict) and len(preferences) > 0:
             # Display preferences from dictionary
             pref_items = [(k, v) for k, v in preferences.items() if v]
@@ -398,15 +404,200 @@ def show_confirmation():
     
     with col2:
         if st.button("✅ Generate My Learning Plan", width='stretch', type="primary"):
+            st.session_state.goal_creation_step = "roadmap_review"
+            st.rerun()
+
+
+def show_roadmap_review():
+    """Step 3b: Review and approve abstract roadmap before content population"""
+    
+    st.markdown("### 🗺️ Review Your Learning Roadmap")
+    st.write("Here's the structure of your learning path. Approve to continue or request changes.")
+    
+    state = st.session_state.goal_draft_state
+    
+    if not state:
+        st.error("State not found")
+        return
+    
+    # Check if roadmap was generated
+    abstract_roadmap = state.get("abstract_roadmap")
+    
+    if not abstract_roadmap:
+        st.warning("Roadmap not generated yet. Generating now...")
+        
+        # Generate roadmap if not already done
+        try:
+            from src.core.nodes.goal_clarifier_node import goal_clarifier_node
+            from src.core.nodes.domain_analyzer_node import domain_analyzer_node
+            from src.core.nodes.curriculum_architect_node import curriculum_architect_node
+            
+            with st.spinner("Analyzing your goal..."):
+                state = goal_clarifier_node(state)
+            
+            with st.spinner("Analyzing domain..."):
+                state = domain_analyzer_node(state)
+            
+            with st.spinner("Creating curriculum structure..."):
+                state = curriculum_architect_node(state)
+            
+            st.session_state.goal_draft_state = state
+            abstract_roadmap = state.get("abstract_roadmap")
+            
+        except Exception as e:
+            logger.error(f"Error generating roadmap: {e}")
+            st.error(f"Failed to generate roadmap: {e}")
+            
+            if st.button("← Back to Confirmation"):
+                st.session_state.goal_creation_step = "confirmation"
+                st.rerun()
+            
+            return
+    
+    # Display roadmap
+    st.markdown("---")
+    st.markdown("#### 📚 Your Learning Modules")
+    
+    modules = abstract_roadmap.get("structure", {}).get("modules", [])
+    total_weeks = abstract_roadmap.get("total_estimated_weeks", 0)
+    
+    if not modules:
+        st.error("No modules found in roadmap")
+        return
+    
+    # Show summary
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Total Modules", len(modules))
+    
+    with col2:
+        st.metric("Estimated Duration", f"{total_weeks} weeks")
+    
+    with col3:
+        daily_mins = state.get("user_profile", {}).get("daily_minutes", 30)
+        st.metric("Your Daily Time", f"{daily_mins} min")
+    
+    st.markdown("---")
+    
+    # Display each module
+    for idx, module in enumerate(modules, 1):
+        with st.expander(
+            f"📚 Module {idx}: {module.get('title', 'Module')}",
+            expanded=(idx == 1)
+        ):
+            # Module details
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                duration = module.get("estimated_weeks", "?")
+                st.caption(f"⏱️ **Duration:** {duration} week(s)")
+            
+            with col2:
+                difficulty = module.get("difficulty", 0.5)
+                diff_label = "Easy" if difficulty < 0.4 else "Medium" if difficulty < 0.7 else "Hard"
+                st.caption(f"📊 **Difficulty:** {diff_label}")
+            
+            with col3:
+                topics_count = len(module.get("topics", []))
+                st.caption(f"📝 **Topics:** {topics_count}")
+            
+            # Description
+            if module.get("description"):
+                st.write(f"**Description:** {module['description']}")
+            
+            # Prerequisites
+            prereqs = module.get("prerequisites", [])
+            if prereqs:
+                st.caption(f"✓ **Prerequisites:** {', '.join(prereqs) if prereqs else 'None'}")
+            
+            # Topics
+            if module.get("topics"):
+                st.markdown("**Topics:**")
+                for topic in module["topics"]:
+                    topic_name = topic.get("title", "Topic")
+                    objectives = topic.get("learning_objectives", [])
+                    
+                    with st.container():
+                        st.write(f"• {topic_name}")
+                        if objectives:
+                            for obj in objectives:
+                                st.caption(f"  - {obj}")
+    
+    st.markdown("---")
+    
+    # Approval section
+    st.markdown("#### ✅ What happens next?")
+    
+    st.info("""
+    **If you approve:**
+    - We'll add curated learning resources for each module
+    - We'll create personalized tasks aligned to your learning style
+    - You'll get a day-by-day learning plan
+    
+    **If you want to revise:**
+    - Tell us what needs to change
+    - We'll regenerate with your feedback
+    """)
+    
+    st.markdown("---")
+    
+    # Action buttons
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col1:
+        if st.button("✅ Approve & Continue", width='stretch', type="primary"):
+            state["roadmap_validated"] = True
+            st.session_state.goal_draft_state = state
             st.session_state.goal_creation_step = "generating"
             st.rerun()
+    
+    with col2:
+        if st.button("🔄 Request Changes", width='stretch'):
+            st.session_state.roadmap_feedback_mode = True
+            st.rerun()
+    
+    with col3:
+        if st.button("← Back", width='stretch'):
+            st.session_state.goal_creation_step = "confirmation"
+            st.rerun()
+    
+    # Feedback mode
+    if st.session_state.get("roadmap_feedback_mode"):
+        st.markdown("---")
+        st.markdown("#### 📝 Tell us what to change")
+        
+        feedback = st.text_area(
+            "What would you like to change about the roadmap?",
+            placeholder="E.g., Too many modules, want more focus on practical projects, need shorter learning path...",
+            height=100
+        )
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("Submit Feedback", width='stretch', type="primary"):
+                if feedback.strip():
+                    state["roadmap_validated"] = False
+                    state["roadmap_validation_feedback"] = feedback
+                    st.session_state.goal_draft_state = state
+                    st.session_state.roadmap_feedback_mode = False
+                    st.session_state.goal_creation_step = "generating"
+                    st.rerun()
+                else:
+                    st.error("Please provide feedback")
+        
+        with col2:
+            if st.button("Cancel", width='stretch'):
+                st.session_state.roadmap_feedback_mode = False
+                st.rerun()
 
 
 def show_generation_progress():
     """Show progress while generating the learning plan"""
     
     st.markdown("### 🔄 Generating Your Personalized Learning Plan")
-    st.write("Please wait while we create your customized roadmap and tasks...")
+    st.write("Please wait while we curate resources and create your daily tasks...")
     
     state = st.session_state.goal_draft_state
     
@@ -419,43 +610,110 @@ def show_generation_progress():
     status_text = st.empty()
     
     try:
-        # Step 1: Analyzing goal
-        status_text.text("📋 Analyzing your learning goal...")
-        progress_bar.progress(10)
-        time.sleep(0.5)
+        # Phases already done: Phase 1 (Discovery) and Phase 2 (Roadmap)
+        # Now doing: Phase 3 (Content Population) and Phase 4 (Adaptive Execution)
         
-        # Step 2: Retrieving resources
-        status_text.text("🔍 Finding the best learning resources...")
-        progress_bar.progress(30)
-        time.sleep(0.5)
+        # If roadmap not yet generated, generate it first
+        if not state.get("abstract_roadmap"):
+            status_text.text("📋 Analyzing your learning goal...")
+            progress_bar.progress(5)
+            
+            from src.core.nodes.goal_clarifier_node import goal_clarifier_node
+            state = goal_clarifier_node(state)
+            progress_bar.progress(10)
+            
+            status_text.text("🔍 Analyzing domain structure...")
+            
+            from src.core.nodes.domain_analyzer_node import domain_analyzer_node
+            state = domain_analyzer_node(state)
+            progress_bar.progress(20)
+            
+            status_text.text("🗺️ Creating curriculum structure...")
+            
+            from src.core.nodes.curriculum_architect_node import curriculum_architect_node
+            state = curriculum_architect_node(state)
+            progress_bar.progress(30)
+            
+            status_text.text("✅ Validating roadmap...")
+            
+            from src.core.nodes.roadmap_validator_node import roadmap_validator_node
+            state = roadmap_validator_node(state)
+            progress_bar.progress(35)
+        else:
+            progress_bar.progress(35)
         
-        # Step 3: Generating roadmap
-        status_text.text("🗺️ Creating your learning roadmap...")
-        progress_bar.progress(50)
+        # Phase 3: Content Population
+        status_text.text("🔍 Finding learning resources...")
+        progress_bar.progress(40)
         
-        # Execute graph
-        with st.spinner("Executing workflow..."):
-            final_state = run_graph_execution(state)
+        from src.core.nodes.module_curator_node import module_curator_node
+        from src.core.nodes.module_task_generator_node import module_task_generator_node
+        from src.core.nodes.content_aggregator_node import content_aggregator_node
         
-        progress_bar.progress(70)
-        time.sleep(0.5)
+        # Curate resources and generate tasks for all modules
+        modules = state.get("abstract_roadmap", {}).get("structure", {}).get("modules", [])
+        module_count = len(modules)
         
-        # Step 4: Creating tasks
-        status_text.text("✅ Generating your first week of tasks...")
+        for idx, module in enumerate(modules):
+            mod_id = module.get("id")
+            state["current_module"] = mod_id
+            
+            # Curate resources for this module
+            state = module_curator_node(state)
+            progress_bar.progress(40 + int((idx / module_count) * 15))
+            
+            # Generate tasks for this module
+            state = module_task_generator_node(state)
+            progress_bar.progress(40 + int(((idx + 0.5) / module_count) * 15))
+        
+        status_text.text("📦 Aggregating content...")
+        progress_bar.progress(60)
+        
+        # Aggregate all content
+        state = content_aggregator_node(state)
+        
+        # Phase 4: Adaptive Execution setup
+        status_text.text("🎯 Setting up learning tracker...")
+        progress_bar.progress(75)
+        
+        from src.core.nodes.progress_tracker_node import progress_tracker_node
+        state = progress_tracker_node(state)
+        progress_bar.progress(80)
+        
+        status_text.text("✨ Finalizing your plan...")
         progress_bar.progress(90)
         time.sleep(0.5)
+        
+        # Save to database
+        try:
+            from src.ui.utils import save_graph_output_to_db
+            goal_id = save_graph_output_to_db(state)
+            state["goal_id"] = goal_id
+            logger.info(f"Saved learning plan to database: goal_id={goal_id}")
+        except Exception as db_error:
+            logger.warning(f"Failed to save to database: {db_error}")
         
         # Complete
         progress_bar.progress(100)
         status_text.text("✨ All done!")
         
         # Set as active goal
-        if final_state.get("goal_id"):
-            st.session_state.active_goal_id = final_state["goal_id"]
-            st.session_state.current_state = final_state
+        if state.get("goal_id"):
+            st.session_state.active_goal_id = state["goal_id"]
+            st.session_state.current_state = state
         
         # Success message
-        st.success("🎉 Your learning plan has been created successfully!")
+        st.success("🎉 Your personalized learning plan has been created!")
+        
+        populated_roadmap = state.get("populated_roadmap")
+        if populated_roadmap:
+            modules = populated_roadmap.get("structure", {}).get("modules", [])
+            st.info(f"""
+            ✅ Plan Generated Successfully!
+            - **Modules:** {len(modules)}
+            - **Duration:** {populated_roadmap.get('total_estimated_weeks', '?')} weeks
+            - **Estimated Completion:** {state.get('target_display', 'As planned')}
+            """)
         
         time.sleep(1)
         
@@ -468,7 +726,7 @@ def show_generation_progress():
         st.rerun()
     
     except Exception as e:
-        logger.error(f"Error generating plan: {e}")
+        logger.error(f"Error generating plan: {e}", exc_info=True)
         progress_bar.empty()
         status_text.empty()
         

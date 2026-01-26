@@ -66,7 +66,7 @@ def get_latest_goal() -> Optional[Dict[str, Any]]:
 
 
 def get_roadmap(goal_id: int) -> Optional[Dict[str, Any]]:
-    """Get roadmap for a goal with proper error handling"""
+    """Get roadmap for a goal with proper error handling. Supports both old and new structures."""
     try:
         with DatabaseManager.get_session_context() as session:
             roadmap = RoadmapCRUD.get_by_goal_id(session, goal_id)
@@ -85,8 +85,14 @@ def get_roadmap(goal_id: int) -> Optional[Dict[str, Any]]:
                     logger.warning(f"Roadmap data is not a dict, got {type(roadmap_data)}")
                     roadmap_data = {}
                 
-                # Extract modules from the roadmap data
-                modules = roadmap_data.get("modules", [])
+                # Handle new 4-phase flow structure (populated_roadmap)
+                if "structure" in roadmap_data:
+                    # New structure: populated_roadmap with structure.modules
+                    modules = roadmap_data.get("structure", {}).get("modules", [])
+                else:
+                    # Old structure: direct modules list
+                    modules = roadmap_data.get("modules", [])
+                
                 if not isinstance(modules, list):
                     logger.warning(f"Modules in roadmap is not a list, got {type(modules)}")
                     modules = []
@@ -95,8 +101,8 @@ def get_roadmap(goal_id: int) -> Optional[Dict[str, Any]]:
                     "id": roadmap.id,
                     "modules": modules,
                     "modules_count": roadmap.modules_count or len(modules),
-                    "estimated_weeks": roadmap.estimated_weeks or roadmap_data.get("total_weeks", "N/A"),
-                    "total_weeks": roadmap_data.get("total_weeks"),
+                    "estimated_weeks": roadmap.estimated_weeks or roadmap_data.get("total_weeks", roadmap_data.get("total_estimated_weeks", "N/A")),
+                    "total_weeks": roadmap_data.get("total_weeks") or roadmap_data.get("total_estimated_weeks"),
                     "milestones": roadmap_data.get("milestones", []),
                     "created_at": roadmap.created_at
                 }
@@ -361,15 +367,42 @@ def get_current_state() -> AppState:
         state["goal_id"] = goal["id"]
         
         if roadmap:
-            # Store full roadmap structure (not just modules)
-            state["roadmap"] = {
-                "modules": roadmap.get("modules", []),
-                "total_weeks": roadmap.get("total_weeks") or roadmap.get("estimated_weeks"),
-                "milestones": roadmap.get("milestones", [])
+            # Get the full roadmap structure
+            modules = roadmap.get("modules", [])
+            
+            # Determine structure type and store appropriately
+            if modules and "resources" in modules[0]:
+                # New 4-phase structure with populated_roadmap
+                state["populated_roadmap"] = {
+                    "structure": {"modules": modules},
+                    "milestones": roadmap.get("milestones", []),
+                    "total_estimated_weeks": roadmap.get("total_weeks") or roadmap.get("estimated_weeks"),
+                    "content_status": "populated"
+                }
+            
+            # Also keep backward compatible field
+            state["abstract_roadmap"] = {
+                "structure": {"modules": modules},
+                "total_estimated_weeks": roadmap.get("total_weeks") or roadmap.get("estimated_weeks")
             }
         
         if tasks:
-            state["tasks"] = tasks
+            state["completed_tasks"] = [t["id"] for t in tasks if t["is_completed"]]
+            
+            # Build task_completion_details from tasks
+            task_details = {}
+            for task in tasks:
+                if task["is_completed"] and task["completed_at"]:
+                    task_details[task["id"]] = {
+                        "completed_at": task["completed_at"].isoformat() if hasattr(task["completed_at"], "isoformat") else str(task["completed_at"]),
+                        "time_spent_minutes": task.get("estimated_minutes", 30),
+                        "difficulty_reported": 0.5,
+                        "performance_score": 0.85,
+                        "feedback": "Completed",
+                        "revision_count": 1
+                    }
+            
+            state["task_completion_details"] = task_details
         
         state["completion_rate"] = metrics.get("completion_rate", 0.0) / 100
         state["performance_metrics"] = metrics
@@ -400,24 +433,44 @@ def run_graph_execution(state: AppState) -> AppState:
 
 
 def run_adaptation_loop(state: AppState) -> AppState:
-    """Run performance analysis and adaptation workflow"""
+    """Run performance analysis and adaptation workflow using 4-phase nodes"""
     try:
-        logger.info("Running adaptation loop...")
+        logger.info("Running adaptation loop (4-phase)...")
         
-        # Import nodes
-        from src.core.nodes.performance_analyzer import performance_analyzer_node
-        from src.core.nodes.knowledge_gap_detector import knowledge_gap_detector_node
-        from src.core.nodes.task_generator import task_generator_node
+        # Import 4-phase nodes
+        from src.core.nodes.progress_tracker_node import progress_tracker_node
+        from src.core.nodes.adaptive_controller_node import adaptive_controller_node
+        from src.core.nodes.replanning_trigger_node import replanning_trigger_node
+        from src.core.nodes.module_curator_node import module_curator_node
+        from src.core.nodes.module_task_generator_node import module_task_generator_node
+        from src.core.nodes.content_aggregator_node import content_aggregator_node
         
-        # Analyze performance
-        state = performance_analyzer_node(state)
+        # Phase 4: Track progress
+        state = progress_tracker_node(state)
         
-        # Detect gaps
-        state = knowledge_gap_detector_node(state)
+        # Phase 4: Analyze for adaptations
+        state = adaptive_controller_node(state)
         
-        # Generate new tasks if needed
-        if state.get("adaptations_needed", False):
-            state = task_generator_node(state)
+        # Phase 4: Check if replanning needed
+        state = replanning_trigger_node(state)
+        
+        # If re-curation triggered, re-curate the struggling module
+        if state.get("re_curation_triggered") and state.get("struggling_module_id"):
+            logger.info(f"Re-curating module: {state['struggling_module_id']}")
+            
+            # Mark module for re-curation
+            module_status = state.get("module_curation_status", {})
+            module_status[state["struggling_module_id"]] = "pending"
+            state["module_curation_status"] = module_status
+            state["current_module"] = state["struggling_module_id"]
+            
+            # Re-curate and regenerate tasks
+            state = module_curator_node(state)
+            state = module_task_generator_node(state)
+            state = content_aggregator_node(state)
+            
+            # Reset trigger
+            state["re_curation_triggered"] = False
         
         logger.info("Adaptation loop completed")
         return state
@@ -549,3 +602,270 @@ def verify_resources_match_goal(goal_text: str, resources: List[Dict[str, Any]])
     logger.info(f"Resource verification: {result}")
     
     return result
+
+def save_graph_output_to_db(state: AppState) -> int:
+    """
+    Save the graph execution results to database.
+    
+    Saves:
+    - LearningGoal (if new)
+    - Roadmap from populated_roadmap
+    - Tasks from module_tasks
+    
+    Args:
+        state: Final state from graph execution
+        
+    Returns:
+        goal_id: The created or updated goal ID
+        
+    Raises:
+        ValueError: If required state fields are missing
+    """
+    try:
+        if not state.get("goal_text"):
+            raise ValueError("goal_text required in state")
+        
+        with DatabaseManager.get_session_context() as session:
+            # 1. Create or get learning goal
+            goal_id = state.get("goal_id")
+            
+            if not goal_id:
+                # Create new goal
+                goal = LearningGoalCRUD.create(
+                    session=session,
+                    goal_text=state.get("original_goal_text") or state.get("goal_text"),
+                    level=state.get("user_profile", {}).get("level", "beginner"),
+                    daily_minutes=state.get("user_profile", {}).get("daily_minutes", 30),
+                    learning_style=state.get("user_profile", {}).get("learning_style", "visual"),
+                    pace=state.get("user_profile", {}).get("pace", "medium"),
+                    preferences=state.get("user_profile", {}).get("preferences", {}),
+                    target_completion_days=state.get("target_completion_days"),
+                    target_display_text=state.get("target_display")
+                )
+                goal_id = goal.id
+                logger.info(f"Created new goal: {goal_id}")
+            else:
+                goal = LearningGoalCRUD.get_by_id(session, goal_id)
+                logger.info(f"Using existing goal: {goal_id}")
+            
+            # 2. Save roadmap from populated_roadmap
+            populated_roadmap = state.get("populated_roadmap")
+            
+            if populated_roadmap:
+                modules = populated_roadmap.get("structure", {}).get("modules", [])
+                modules_count = len(modules)
+                total_weeks = populated_roadmap.get("total_estimated_weeks", 8)
+                
+                # Create roadmap record
+                roadmap = RoadmapCRUD.create(
+                    session=session,
+                    goal_id=goal_id,
+                    roadmap_json=populated_roadmap,
+                    modules_count=modules_count,
+                    estimated_weeks=total_weeks
+                )
+                logger.info(f"Created roadmap: {roadmap.id} with {modules_count} modules")
+            
+            # 3. Save tasks from module_tasks
+            module_tasks = state.get("module_tasks", {})
+            day_number = 1
+            
+            for module_id, tasks in module_tasks.items():
+                for task in tasks:
+                    TaskCRUD.create(
+                        session=session,
+                        goal_id=goal_id,
+                        day_number=day_number,
+                        task_text=task.get("title", "Task"),
+                        why_text=task.get("description", ""),
+                        estimated_minutes=task.get("estimated_minutes", 30),
+                        difficulty_score=task.get("difficulty", 0.5),
+                        resources_json=task.get("resources_used", [])
+                    )
+                    day_number += 1
+            
+            logger.info(f"Saved {day_number - 1} tasks for goal {goal_id}")
+            
+            return goal_id
+    
+    except Exception as e:
+        logger.error(f"Error saving graph output to database: {e}", exc_info=True)
+        raise
+
+
+def convert_module_tasks_to_display_format(state: AppState) -> List[Dict[str, Any]]:
+    """
+    Convert module_tasks structure to flat, displayable format.
+    
+    Transforms:
+        {mod_1: [{id, title, description}], mod_2: [{...}]}
+    To:
+        [{module_id, module_title, day, task_id, title, description, ...}, ...]
+    
+    Args:
+        state: Application state with module_tasks and abstract_roadmap
+        
+    Returns:
+        List of task dictionaries with module context
+    """
+    try:
+        module_tasks = state.get("module_tasks", {})
+        abstract_roadmap = state.get("abstract_roadmap", {})
+        populated_roadmap = state.get("populated_roadmap", {})
+        
+        # Get module info
+        modules = {}
+        
+        # Try populated_roadmap first (has resources)
+        if populated_roadmap:
+            for mod in populated_roadmap.get("structure", {}).get("modules", []):
+                modules[mod["id"]] = mod
+        
+        # Fall back to abstract_roadmap
+        if not modules and abstract_roadmap:
+            for mod in abstract_roadmap.get("structure", {}).get("modules", []):
+                modules[mod["id"]] = mod
+        
+        # Convert to flat list
+        result = []
+        day_number = 1
+        
+        for module_id in sorted(module_tasks.keys()):
+            tasks = module_tasks[module_id]
+            module_info = modules.get(module_id, {})
+            
+            for task in tasks:
+                result.append({
+                    "module_id": module_id,
+                    "module_title": module_info.get("title", "Module"),
+                    "day_number": day_number,
+                    "task_id": task.get("id"),
+                    "task_title": task.get("title", "Task"),
+                    "task_description": task.get("description", ""),
+                    "task_type": task.get("task_type", "exercise"),
+                    "difficulty": task.get("difficulty", 0.5),
+                    "estimated_minutes": task.get("estimated_minutes", 30),
+                    "learning_objectives": task.get("learning_objectives", []),
+                    "success_criteria": task.get("success_criteria", ""),
+                    "hints": task.get("hints", [])
+                })
+                day_number += 1
+        
+        return result
+    
+    except Exception as e:
+        logger.error(f"Error converting module tasks: {e}")
+        return []
+
+
+def get_current_module_tasks(state: AppState) -> List[Dict[str, Any]]:
+    """
+    Get tasks for the currently active module.
+    
+    Args:
+        state: Application state with current_module and module_tasks
+        
+    Returns:
+        List of tasks for the current module
+    """
+    try:
+        current_module = state.get("current_module")
+        module_tasks = state.get("module_tasks", {})
+        
+        if not current_module:
+            return []
+        
+        tasks = module_tasks.get(current_module, [])
+        return tasks
+    
+    except Exception as e:
+        logger.error(f"Error getting current module tasks: {e}")
+        return []
+
+
+def update_task_completion_in_state(
+    state: AppState,
+    task_id: str,
+    time_spent_minutes: int,
+    difficulty_reported: float,
+    performance_score: float = 0.85
+) -> AppState:
+    """
+    Update state when user completes a task.
+    
+    Updates:
+    - completed_tasks list
+    - task_completion_details dictionary
+    - Recalculates performance_metrics
+    
+    Args:
+        state: Current application state
+        task_id: ID of completed task
+        time_spent_minutes: How long task took
+        difficulty_reported: User's perceived difficulty (0-1)
+        performance_score: User's performance (0-1)
+        
+    Returns:
+        Updated state
+    """
+    try:
+        # Add to completed tasks
+        completed = state.get("completed_tasks", [])
+        if task_id not in completed:
+            completed.append(task_id)
+            state["completed_tasks"] = completed
+        
+        # Record completion details
+        task_details = state.get("task_completion_details", {})
+        task_details[task_id] = {
+            "completed_at": datetime.utcnow().isoformat(),
+            "time_spent_minutes": time_spent_minutes,
+            "difficulty_reported": difficulty_reported,
+            "performance_score": performance_score,
+            "feedback": "Task completed",
+            "revision_count": 1
+        }
+        state["task_completion_details"] = task_details
+        
+        # Recalculate metrics
+        state = _recalculate_performance_metrics(state)
+        
+        logger.info(f"Task {task_id} marked complete in state")
+        return state
+    
+    except Exception as e:
+        logger.error(f"Error updating task completion: {e}")
+        return state
+
+
+def _recalculate_performance_metrics(state: AppState) -> AppState:
+    """Recalculate performance metrics from task_completion_details."""
+    try:
+        task_details = state.get("task_completion_details", {})
+        
+        if not task_details:
+            state["performance_metrics"] = {}
+            return state
+        
+        # Calculate metrics
+        times = [d.get("time_spent_minutes", 0) for d in task_details.values()]
+        difficulties = [d.get("difficulty_reported", 0.5) for d in task_details.values()]
+        performances = [d.get("performance_score", 0.8) for d in task_details.values()]
+        
+        metrics = {
+            "total_time_spent_minutes": sum(times),
+            "avg_time_per_task": sum(times) / len(times) if times else 0,
+            "avg_difficulty_reported": sum(difficulties) / len(difficulties) if difficulties else 0.5,
+            "avg_performance_score": sum(performances) / len(performances) if performances else 0.8,
+            "completion_velocity": len(task_details) / max(1, sum(times) / 60),  # tasks per hour
+            "consistency_score": min(1.0, sum(performances) / len(performances) if performances else 0.8),
+            "tasks_completed": len(task_details)
+        }
+        
+        state["performance_metrics"] = metrics
+        
+        return state
+    
+    except Exception as e:
+        logger.error(f"Error recalculating metrics: {e}")
+        return state

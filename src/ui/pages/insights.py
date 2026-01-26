@@ -9,13 +9,72 @@ from typing import Dict, List
 
 from src.ui.utils import (
     get_active_goal, get_performance_metrics, get_learning_gaps,
-    predict_completion_date, get_tasks_for_goal, get_completion_rate
+    predict_completion_date, get_tasks_for_goal, get_completion_rate, get_current_state
 )
 from src.agents.insight_agent import InsightAgent
 from src.llm.config import LLMConfig
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def show_adaptive_insights(state: Dict):
+    """Display insights from adaptive controller analysis"""
+    
+    st.markdown("### 🎯 Personalized Adaptive Insights")
+    
+    struggles = state.get("struggles_detected", False)
+    severity = state.get("struggle_severity", 0)
+    
+    if struggles:
+        # Show struggle alert
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            if severity > 0.7:
+                st.error("🚨 **Significant Learning Challenges Detected**")
+            else:
+                st.warning("⚠️ **Some Areas Need Attention**")
+            
+            st.markdown(f"**Struggle Severity:** {severity:.0%}")
+        
+        with col2:
+            if st.button("📚 View Alternatives"):
+                st.session_state.current_page = "View Plan"
+                st.rerun()
+        
+        # Show struggling topics
+        if state.get("struggling_topics"):
+            st.markdown("**Topics with Challenges:**")
+            for topic in state["struggling_topics"]:
+                st.write(f"• {topic}")
+        
+        # Show struggling modules
+        if state.get("struggling_module_id"):
+            st.info(f"📦 **Module:** {state['struggling_module_id']}")
+    
+    # Show recommended actions
+    if state.get("recommended_actions"):
+        st.markdown("**What You Can Do:**")
+        for action in state["recommended_actions"]:
+            st.write(f"✓ {action}")
+    
+    # Show pacing recommendation
+    if state.get("pacing_adjustment") and state["pacing_adjustment"] != 1.0:
+        pacing = state["pacing_adjustment"]
+        if pacing < 1.0:
+            pacing_pct = int((1 - pacing) * 100)
+            st.info(f"🐢 Consider slowing down by {pacing_pct}% to better consolidate learning")
+        else:
+            pacing_pct = int((pacing - 1) * 100)
+            st.success(f"🚀 You're excelling! Consider accelerating by {pacing_pct}%")
+    
+    # Re-curation status
+    if state.get("re_curation_triggered"):
+        st.success("✨ Alternative resources are being generated for your struggling areas")
+    
+    st.markdown("---")
+
 
 
 def show():
@@ -36,6 +95,9 @@ def show():
         
         return
     
+    # Get current state for adaptive insights
+    state = get_current_state()
+    
     # Check if enough data exists
     tasks = get_tasks_for_goal(goal["id"])
     completed_tasks = [t for t in tasks if t.get('is_completed')]
@@ -43,6 +105,10 @@ def show():
     if len(completed_tasks) < 3:
         show_insufficient_data_message(completed_tasks)
         return
+    
+    # Show adaptation alerts first if available
+    if state.get("struggles_detected") or state.get("adaptation_required"):
+        show_adaptive_insights(state)
     
     # Display insights
     show_ai_insights(goal)
@@ -87,9 +153,6 @@ def show_ai_insights(goal: Dict):
         # Generate insights using Insight Agent
         with st.spinner("🔮 Analyzing your learning patterns..."):
             insight_agent = InsightAgent()
-            
-            # Get current state
-            from src.ui.utils import get_current_state
             state = get_current_state()
             
             # Generate insights

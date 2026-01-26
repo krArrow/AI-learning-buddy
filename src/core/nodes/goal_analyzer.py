@@ -8,6 +8,7 @@ import time
 from src.core.state import AppState, validate_state
 from src.database import db_manager, LearningGoalCRUD
 from src.utils.logger import get_logger
+from src.utils.goal_enrichment import estimate_goal_hours, calculate_eta
 
 logger = get_logger(__name__)
 
@@ -105,7 +106,7 @@ def goal_analysis_node(state: AppState) -> AppState:
         
         # Step 5: Normalize learning_style
         learning_style = state.get("learning_style", "visual").lower().strip()
-        valid_styles = {"visual", "kinesthetic", "auditory", "reading"}
+        valid_styles = {"visual", "kinesthetic", "auditory", "reading_writing"}
         if learning_style not in valid_styles:
             logger.warning(
                 f"[{node_name}] Invalid learning_style '{learning_style}', defaulting to 'visual'"
@@ -132,7 +133,16 @@ def goal_analysis_node(state: AppState) -> AppState:
             preferences = {}
             state["preferences"] = preferences
         
-        # Step 8: Store goal in database
+        # Step 8: Get user's target completion timeline
+        target_completion_days = state.get("target_completion_days")
+        target_display_text = state.get("target_display", "Not specified")
+        
+        logger.info(
+            f"[{node_name}] User target completion: {target_display_text} "
+            f"({target_completion_days} days)"
+        )
+        
+        # Step 9: Store goal in database with target completion
         logger.info(f"[{node_name}] Storing goal in database")
         
         try:
@@ -144,18 +154,23 @@ def goal_analysis_node(state: AppState) -> AppState:
                     daily_minutes=daily_minutes,
                     learning_style=learning_style,
                     pace=pace,
-                    preferences=preferences
+                    preferences=preferences,
+                    target_completion_days=target_completion_days,
+                    target_display_text=target_display_text
                 )
                 
                 # Update state with goal_id
                 state["goal_id"] = goal.id
-                logger.info(f"[{node_name}] Goal stored successfully with ID: {goal.id}")
+                logger.info(
+                    f"[{node_name}] Goal stored successfully with ID: {goal.id}, "
+                    f"Target: {target_display_text}"
+                )
                 
         except Exception as db_error:
             logger.error(f"[{node_name}] Database error: {db_error}", exc_info=True)
             raise GoalAnalysisError(f"Failed to store goal in database: {db_error}")
         
-        # Step 9: Update metadata
+        # Step 10: Update metadata
         elapsed = time.time() - start_time
         if "metadata" not in state:
             state["metadata"] = {}

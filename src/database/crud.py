@@ -4,6 +4,7 @@ Provides a clean interface for database interactions.
 """
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
+import json
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
 
@@ -27,9 +28,11 @@ class LearningGoalCRUD:
         daily_minutes: int,
         learning_style: Optional[str] = None,
         pace: Optional[str] = None,
-        preferences: Optional[Dict[str, Any]] = None
+        preferences: Optional[Dict[str, Any]] = None,
+        target_completion_days: Optional[int] = None,
+        target_display_text: Optional[str] = None
     ) -> LearningGoal:
-        """Create a new learning goal."""
+        """Create a new learning goal with target completion timeline."""
         try:
             # Deactivate existing active goals
             session.query(LearningGoal).filter(
@@ -43,12 +46,14 @@ class LearningGoalCRUD:
                 learning_style=learning_style or "visual",
                 pace=pace or "medium",
                 preferences=preferences or {},
+                target_completion_days=target_completion_days,
+                target_display_text=target_display_text,
                 is_active=True
             )
             session.add(goal)
             session.commit()
             session.refresh(goal)
-            logger.info(f"Created learning goal: {goal.id}")
+            logger.info(f"Created learning goal: {goal.id} with target: {target_display_text}")
             return goal
         except Exception as e:
             session.rollback()
@@ -162,13 +167,23 @@ class TaskCRUD:
     ) -> Task:
         """Create a new task."""
         try:
+            # Ensure resources are properly formatted
+            resources = resources_json or []
+            if isinstance(resources, str):
+                try:
+                    resources = json.loads(resources)
+                except (json.JSONDecodeError, ValueError):
+                    resources = []
+            elif not isinstance(resources, list):
+                resources = []
+            
             task = Task(
                 goal_id=goal_id,
                 day_number=day_number,
                 task_text=task_text,
                 why_text=why_text,
                 estimated_minutes=estimated_minutes,
-                resources_json=resources_json or [],
+                resources_json=resources,
                 difficulty_score=difficulty_score or 0.5
             )
             session.add(task)
@@ -394,10 +409,19 @@ def create_progress_record(
     """
     from src.database.db import DatabaseManager
     
-    if session is None:
-        session = DatabaseManager.get_session()
+    close_session = False
     
     try:
+        # If no session provided, try to get one
+        if session is None:
+            try:
+                session = DatabaseManager.get_session()
+                close_session = True
+            except RuntimeError as e:
+                # Database not initialized, log warning and return None
+                logger.warning(f"Database not initialized, skipping progress record creation: {e}")
+                return None
+        
         return ProgressCRUD.create_or_update(
             session=session,
             goal_id=goal_id,
@@ -410,7 +434,7 @@ def create_progress_record(
         logger.error(f"Failed to create progress record: {e}", exc_info=True)
         raise
     finally:
-        if session:
+        if session and close_session:
             session.close()
 
 

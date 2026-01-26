@@ -10,6 +10,7 @@ from src.llm.config import get_llm, invoke_llm
 from src.llm.prompts import GOAL_CLARIFIER_SYSTEM_PROMPT
 from src.database import db_manager, ConversationCRUD
 from src.utils.logger import get_logger
+from src.utils.goal_enrichment import enrich_goal_text
 
 logger = get_logger(__name__)
 
@@ -60,14 +61,46 @@ class GoalClarifierAgent:
         conversation = state.get("conversation_history", [])
         
         try:
-            # If starting conversation, add initial context
+            # If starting conversation, add initial context with ALL form data
             if len(conversation) == 0:
                 logger.info("[GoalClarifierAgent] Starting new conversation")
+                
+                # Get user profile
+                user_profile = state.get("user_profile", {})
+                
+                # Build comprehensive initial context with all pre-filled information
+                context_parts = [f"I want to {state['goal_text']}"]
+                
+                # Add level if provided
+                if user_profile.get('level'):
+                    context_parts.append(f"My current level is {user_profile['level']}")
+                
+                # Add daily time commitment
+                if user_profile.get('daily_minutes'):
+                    context_parts.append(f"I can dedicate {user_profile['daily_minutes']} minutes per day")
+                
+                # Add learning style if already selected
+                if user_profile.get('learning_style'):
+                    style_display = user_profile['learning_style'].replace('_', '/').title()
+                    context_parts.append(f"My preferred learning style is {style_display}")
+                
+                # Add pace if already selected
+                if user_profile.get('pace'):
+                    context_parts.append(f"I prefer a {user_profile['pace']} learning pace")
+                
+                # Add any additional preferences
+                if user_profile.get('preferences') and isinstance(user_profile['preferences'], dict):
+                    for key, value in user_profile['preferences'].items():
+                        if value:
+                            context_parts.append(f"{key}: {value}")
+                
+                # Combine all context into initial message
                 initial_context = {
                     "role": "user",
-                    "content": f"I want to {state['goal_text']}"
+                    "content": ". ".join(context_parts) + "."
                 }
                 conversation.append(initial_context)
+                logger.info(f"[GoalClarifierAgent] Initial context: {initial_context['content']}")
             elif user_message:
                 # Add user's response
                 conversation.append({
@@ -117,16 +150,32 @@ class GoalClarifierAgent:
             if clarification_complete and extracted_data:
                 # Update state with extracted information
                 if "learning_style" in extracted_data:
-                    state["learning_style"] = extracted_data["learning_style"]
+                    state["user_profile"]["learning_style"] = extracted_data["learning_style"]
                 if "pace" in extracted_data:
-                    state["pace"] = extracted_data["pace"]
+                    state["user_profile"]["pace"] = extracted_data["pace"]
                 if "preferences" in extracted_data:
-                    state["preferences"].update(extracted_data["preferences"])
+                    state["user_profile"]["preferences"].update(extracted_data["preferences"])
                 
                 logger.info(
                     f"[GoalClarifierAgent] Clarification complete - "
-                    f"style: {state['learning_style']}, pace: {state['pace']}"
+                    f"style: {state['user_profile']['learning_style']}, pace: {state['user_profile']['pace']}"
                 )
+                
+                # CRITICAL: Enrich goal_text with clarified preferences
+                # This ensures the content curator receives full context
+                original_goal_text = state.get("goal_text", "")
+                enriched_goal_text = enrich_goal_text(state)
+                
+                # Store original for reference
+                if "original_goal_text" not in state:
+                    state["original_goal_text"] = original_goal_text
+                
+                # Update with enriched version for downstream agents
+                state["goal_text"] = enriched_goal_text
+                
+                logger.info("[GoalClarifierAgent] ✓ Goal text enriched with user preferences")
+                logger.info(f"[GoalClarifierAgent] Original: {original_goal_text[:60]}...")
+                logger.info(f"[GoalClarifierAgent] Enriched: {enriched_goal_text[:100]}...")
             
             # Store conversation in database if goal_id exists
             if state.get("goal_id"):
@@ -173,6 +222,35 @@ class GoalClarifierAgent:
         except json.JSONDecodeError as e:
             logger.warning(f"JSON decode error: {e}")
             return None
+    
+    def process_answer(
+        self,
+        state: AppState,
+        user_answer: str
+    ) -> AppState:
+        """
+        Process user's answer to clarification questions.
+        
+        Args:
+            state: Current application state
+            user_answer: User's answer to the current question
+            
+        Returns:
+            Updated state with user's answer incorporated
+        """
+        logger.info("[GoalClarifierAgent] Processing user answer")
+        
+        try:
+            # Invoke clarify_goal to get next question
+            # Note: clarify_goal will add the user_message to conversation history
+            state = self.clarify_goal(state, user_message=user_answer)
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"[GoalClarifierAgent] Error processing answer: {e}", exc_info=True)
+            state["error"] = f"Failed to process answer: {str(e)}"
+            return state
 
 
 __all__ = ["GoalClarifierAgent"]

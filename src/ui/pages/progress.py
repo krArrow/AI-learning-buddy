@@ -10,11 +10,55 @@ from typing import Dict, List
 
 from src.ui.utils import (
     get_active_goal, get_performance_metrics, get_progress_history,
-    get_tasks_for_goal, get_completion_rate, format_duration
+    get_tasks_for_goal, get_completion_rate, format_duration, get_current_state
 )
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+
+def show_adaptation_alerts(state: Dict):
+    """Display alerts about detected struggles and recommended adaptations"""
+    
+    if state.get("struggles_detected"):
+        severity = state.get("struggle_severity", 0)
+        
+        if severity > 0.7:
+            st.warning("⚠️ **Significant Learning Challenges Detected**")
+        else:
+            st.info("📢 **Adaptive Recommendations Available**")
+        
+        # Show struggle details
+        if state.get("struggle_topic"):
+            st.markdown(f"**Struggling with:** {state['struggle_topic']}")
+        
+        if state.get("struggling_module_id"):
+            st.markdown(f"**Module:** {state['struggling_module_id']}")
+        
+        # Show recommended actions
+        if state.get("recommended_actions"):
+            st.markdown("**Recommended Actions:**")
+            for action in state["recommended_actions"]:
+                st.write(f"• {action}")
+        
+        # Show pacing adjustment
+        if state.get("pacing_adjustment") and state["pacing_adjustment"] != 1.0:
+            pacing = state["pacing_adjustment"]
+            if pacing < 1.0:
+                pacing_pct = int((1 - pacing) * 100)
+                st.warning(f"🐢 **Suggestion:** Slow down by {pacing_pct}% to consolidate learning")
+            else:
+                pacing_pct = int((pacing - 1) * 100)
+                st.success(f"🚀 **Great pace!** You're ahead by {pacing_pct}%")
+        
+        # Re-curation option
+        if state.get("re_curation_triggered"):
+            st.info("♻️ Generating alternative resources for your struggling topic...")
+            if st.button("📚 View Alternative Resources"):
+                st.session_state.current_page = "View Plan"
+                st.rerun()
+        
+        st.markdown("---")
 
 
 def show():
@@ -28,7 +72,7 @@ def show():
     if not goal:
         st.warning("⚠️ No active learning goal found.")
         
-        if st.button("🎯 Create New Goal", use_container_width=True):
+        if st.button("🎯 Create New Goal", width='stretch'):
             st.session_state.current_page = "Create Goal"
             st.rerun()
         
@@ -36,6 +80,11 @@ def show():
     
     # Display progress overview
     show_progress_overview(goal)
+    
+    # Show adaptation status if available
+    state = get_current_state()
+    if state.get("struggles_detected") or state.get("adaptation_required"):
+        show_adaptation_alerts(state)
     
     # Display detailed metrics
     show_performance_metrics(goal)
@@ -359,7 +408,7 @@ def show_task_breakdown(goal: Dict):
     st.dataframe(
         df,
         hide_index=True,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "Day": st.column_config.NumberColumn("Day", format="%d"),
             "Difficulty": st.column_config.ProgressColumn(

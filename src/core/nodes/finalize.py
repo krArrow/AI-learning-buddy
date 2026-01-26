@@ -213,7 +213,10 @@ def _store_progress(state: AppState, metadata: dict) -> None:
             notes=f"Workflow finalized. Metadata: {metadata}"
         )
         
-        logger.info(f"Stored progress record: {progress_record.id if hasattr(progress_record, 'id') else 'unknown'}")
+        if progress_record:
+            logger.info(f"Stored progress record: {progress_record.id if hasattr(progress_record, 'id') else 'unknown'}")
+        else:
+            logger.info("Progress record creation skipped (database not initialized)")
         
     except Exception as e:
         logger.error(f"Failed to store progress record: {str(e)}")

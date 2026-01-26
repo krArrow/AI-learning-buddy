@@ -94,45 +94,49 @@ def _analyze_task_complexity(task_description: str) -> float:
         Base difficulty score (0.0-1.0)
     """
     desc_lower = task_description.lower()
-    score = 0.3  # Base score
+    score = 0.4  # Neutral base score (was 0.3)
     
-    # Beginner indicators (decrease difficulty)
+    # Beginner indicators (decrease difficulty, but with limits)
     beginner_keywords = [
         "introduction", "basics", "getting started", "hello world",
-        "simple", "first", "learn", "tutorial", "beginner"
+        "simple", "first", "learn", "tutorial", "beginner", "overview"
     ]
-    for keyword in beginner_keywords:
-        if keyword in desc_lower:
-            score -= 0.1
+    beginner_count = sum(1 for keyword in beginner_keywords if keyword in desc_lower)
+    # Clamp beginner adjustment to -0.2 max (prevent going too low)
+    score -= min(beginner_count * 0.08, 0.2)
     
     # Intermediate indicators
     intermediate_keywords = [
         "implement", "create", "build", "design", "develop",
-        "practice", "exercise", "project"
+        "practice", "exercise", "project", "apply", "use"
     ]
-    for keyword in intermediate_keywords:
-        if keyword in desc_lower:
-            score += 0.1
+    intermediate_count = sum(1 for keyword in intermediate_keywords if keyword in desc_lower)
+    score += min(intermediate_count * 0.08, 0.2)
     
     # Advanced indicators (increase difficulty)
     advanced_keywords = [
         "advanced", "complex", "integrate", "optimize", "architect",
-        "production", "scale", "performance", "security", "deploy"
+        "production", "scale", "performance", "security", "deploy",
+        "refactor", "test", "debug"
     ]
-    for keyword in advanced_keywords:
-        if keyword in desc_lower:
-            score += 0.2
+    advanced_count = sum(1 for keyword in advanced_keywords if keyword in desc_lower)
+    score += min(advanced_count * 0.12, 0.3)
     
     # Multiple components indicator
     component_keywords = ["and", "with", "using", "integrate", "combine"]
     component_count = sum(1 for kw in component_keywords if kw in desc_lower)
     if component_count >= 2:
-        score += 0.1
+        score += 0.08
+    elif component_count >= 4:
+        score += 0.15
     
     # Length indicator (longer = potentially more complex)
     if len(task_description) > 100:
+        score += 0.05
+    elif len(task_description) > 150:
         score += 0.1
     
+    # Clamp to valid range throughout calculation
     return max(0.1, min(0.9, score))
 
 

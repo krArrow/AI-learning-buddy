@@ -19,57 +19,95 @@ def show():
     
     st.markdown('<h1 class="main-header">🗺️ Your Learning Roadmap</h1>', unsafe_allow_html=True)
     
-    # Check for active goal
-    goal = get_active_goal()
-    
-    if not goal:
-        st.warning("⚠️ No active learning goal found.")
-        st.info("Create a new learning goal to generate your personalized roadmap.")
+    try:
+        # Check for active goal
+        goal = get_active_goal()
         
-        if st.button("🎯 Create New Goal", use_container_width=True):
-            st.session_state.current_page = "Create Goal"
+        if not goal:
+            st.warning("⚠️ No active learning goal found.")
+            st.info("Create a new learning goal to generate your personalized roadmap.")
+            
+            if st.button("🎯 Create New Goal", width='stretch'):
+                st.session_state.current_page = "Create Goal"
+                st.rerun()
+            
+            return
+        
+        # Validate goal data
+        if not all(k in goal for k in ["id", "goal_text", "level", "daily_minutes"]):
+            st.error("❌ Invalid goal data structure. Please create a new goal.")
+            if st.button("🎯 Create New Goal", width='stretch'):
+                st.session_state.current_page = "Create Goal"
+                st.rerun()
+            return
+        
+        # Get roadmap
+        roadmap = get_roadmap(goal["id"])
+        
+        if not roadmap:
+            st.warning("📋 Your learning roadmap hasn't been generated yet.")
+            st.info("This usually happens automatically when you create a goal. Try creating a new goal.")
+            
+            if st.button("🎯 Create New Goal", width='stretch'):
+                st.session_state.current_page = "Create Goal"
+                st.rerun()
+            
+            return
+        
+        # Validate roadmap data
+        if not isinstance(roadmap, dict):
+            st.error("❌ Invalid roadmap data structure.")
+            return
+        
+        # Display roadmap
+        show_roadmap_overview(goal, roadmap)
+        show_modules_detail(roadmap)
+        show_timeline_visualization(roadmap)
+        show_action_buttons()
+        
+    except Exception as e:
+        logger.error(f"Error displaying view plan: {e}", exc_info=True)
+        st.error(f"❌ An error occurred while loading the learning plan: {e}")
+        
+        if st.button("🔄 Retry"):
             st.rerun()
         
-        return
-    
-    # Get roadmap
-    roadmap = get_roadmap(goal["id"])
-    
-    if not roadmap:
-        st.warning("📋 Your learning roadmap hasn't been generated yet.")
-        st.info("This usually happens automatically when you create a goal. Try creating a new goal.")
-        
-        if st.button("🎯 Create New Goal", use_container_width=True):
-            st.session_state.current_page = "Create Goal"
+        if st.button("🏠 Back to Home"):
+            st.session_state.current_page = "Home"
             st.rerun()
-        
-        return
-    
-    # Display roadmap
-    show_roadmap_overview(goal, roadmap)
-    show_modules_detail(roadmap)
-    show_timeline_visualization(roadmap)
-    show_action_buttons()
 
 
 def show_roadmap_overview(goal: Dict, roadmap: Dict):
     """Display roadmap overview and metadata"""
     
-    st.markdown(f"### 📚 {goal['goal_text']}")
+    st.markdown(f"### 📚 {goal.get('goal_text', 'Learning Goal')}")
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Total Modules", roadmap["modules_count"])
+        modules_count = roadmap.get("modules_count", 0)
+        if not modules_count:
+            # Count modules if not provided
+            modules = roadmap.get("modules", [])
+            if isinstance(modules, str):
+                try:
+                    modules = json.loads(modules)
+                except:
+                    modules = []
+            modules_count = len(modules) if isinstance(modules, list) else 0
+        st.metric("Total Modules", modules_count)
     
     with col2:
-        st.metric("Estimated Duration", f"{roadmap['estimated_weeks']} weeks")
+        estimated_weeks = roadmap.get('estimated_weeks', 'N/A')
+        st.metric("Estimated Duration", f"{estimated_weeks} weeks" if isinstance(estimated_weeks, int) else str(estimated_weeks))
     
     with col3:
-        st.metric("Your Level", goal["level"].title())
+        level = goal.get("level", "Beginner")
+        st.metric("Your Level", level.title() if isinstance(level, str) else "Beginner")
     
     with col4:
-        st.metric("Daily Time", format_duration(goal["daily_minutes"]))
+        daily_minutes = goal.get("daily_minutes", 60)
+        st.metric("Daily Time", format_duration(daily_minutes))
     
     st.markdown("---")
 
@@ -80,13 +118,19 @@ def show_modules_detail(roadmap: Dict):
     st.markdown("### 📖 Learning Modules")
     st.write("Your learning journey is organized into progressive modules:")
     
-    modules = roadmap["modules"]
+    modules = roadmap.get("modules", [])
     
+    # Parse modules if they're a JSON string
     if isinstance(modules, str):
         try:
             modules = json.loads(modules)
-        except:
+        except Exception as e:
+            st.error(f"Error parsing modules: {e}")
             modules = []
+    
+    # Ensure modules is a list
+    if not isinstance(modules, list):
+        modules = []
     
     if not modules:
         st.warning("No modules found in roadmap")
@@ -94,6 +138,10 @@ def show_modules_detail(roadmap: Dict):
     
     # Display each module
     for idx, module in enumerate(modules):
+        # Skip if module is not a dictionary
+        if not isinstance(module, dict):
+            continue
+        
         # Module number badge
         module_num = idx + 1
         
@@ -152,16 +200,61 @@ def show_modules_detail(roadmap: Dict):
                 resources = module['resources']
                 
                 if isinstance(resources, list):
-                    for resource in resources[:5]:  # Show max 5
+                    for idx_res, resource in enumerate(resources[:10], 1):  # Show max 10 resources
                         if isinstance(resource, dict):
                             title = resource.get('title', 'Resource')
-                            url = resource.get('url', '#')
-                            res_type = resource.get('type', 'resource')
+                            url = resource.get('url', resource.get('link', ''))
+                            res_type = resource.get('type', resource.get('resource_type', 'resource'))
+                            platform = resource.get('platform', 'Unknown')
+                            description = resource.get('description', '')
+                            difficulty = resource.get('difficulty', None)
+                            estimated_hours = resource.get('estimated_hours', None)
+                            combined_score = resource.get('combined_score', None)
                             emoji = get_resource_emoji(res_type)
                             
-                            st.markdown(f"{emoji} [{title}]({url}) - _{res_type}_")
-                        else:
-                            st.write(f"• {resource}")
+                            # Create a nice card-like display for each resource
+                            with st.container():
+                                # Title with link
+                                if url and url.startswith('http'):
+                                    st.markdown(f"**{idx_res}.** {emoji} [{title}]({url})")
+                                else:
+                                    st.markdown(f"**{idx_res}.** {emoji} **{title}**")
+                                
+                                # Resource metadata in columns
+                                meta_cols = st.columns([1, 1, 1, 1])
+                                
+                                with meta_cols[0]:
+                                    st.caption(f"📦 Type: {res_type.title()}")
+                                
+                                with meta_cols[1]:
+                                    st.caption(f"🌐 Platform: {platform}")
+                                
+                                with meta_cols[2]:
+                                    if estimated_hours:
+                                        st.caption(f"⏱️ Est. Hours: {estimated_hours}")
+                                    else:
+                                        st.caption(f"⏱️ Duration: N/A")
+                                
+                                with meta_cols[3]:
+                                    if difficulty is not None:
+                                        difficulty_level = "Easy" if difficulty < 0.3 else "Medium" if difficulty < 0.6 else "Hard"
+                                        st.caption(f"📊 Difficulty: {difficulty_level}")
+                                    else:
+                                        st.caption(f"📊 Difficulty: N/A")
+                                
+                                # Description
+                                if description:
+                                    st.caption(f"💡 {description}")
+                                
+                                # Show match score if available
+                                if combined_score is not None:
+                                    st.progress(combined_score, text=f"Match Score: {combined_score*100:.0f}%")
+                                
+                                st.markdown("")  # Add spacing
+                        elif isinstance(resource, str):
+                            st.write(f"📌 {idx_res}. {resource}")
+                else:
+                    st.write(f"📌 {resources}")
             
             # Milestones
             if module.get('milestones'):
@@ -182,13 +275,19 @@ def show_timeline_visualization(roadmap: Dict):
     
     st.markdown("### 📅 Learning Timeline")
     
-    modules = roadmap["modules"]
+    modules = roadmap.get("modules", [])
     
+    # Parse modules if they're a JSON string
     if isinstance(modules, str):
         try:
             modules = json.loads(modules)
-        except:
+        except Exception as e:
+            st.error(f"Error parsing modules: {e}")
             modules = []
+    
+    # Ensure modules is a list
+    if not isinstance(modules, list):
+        modules = []
     
     if not modules:
         return
@@ -198,6 +297,10 @@ def show_timeline_visualization(roadmap: Dict):
     cumulative_weeks = 0
     
     for idx, module in enumerate(modules):
+        # Skip if module is not a dictionary
+        if not isinstance(module, dict):
+            continue
+        
         duration = module.get('duration_weeks', module.get('estimated_weeks', 2))
         
         if isinstance(duration, str):
@@ -216,6 +319,10 @@ def show_timeline_visualization(roadmap: Dict):
         
         cumulative_weeks += duration
     
+    if not timeline_data:
+        st.warning("No valid timeline data available")
+        return
+    
     # Display as bar chart
     df = pd.DataFrame(timeline_data)
     
@@ -226,7 +333,7 @@ def show_timeline_visualization(roadmap: Dict):
         st.dataframe(
             df,
             hide_index=True,
-            use_container_width=True
+            width='stretch'
         )
     
     # Total duration
@@ -251,17 +358,17 @@ def show_action_buttons():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("✅ Start Learning", use_container_width=True, type="primary"):
+        if st.button("✅ Start Learning", width='stretch', type="primary"):
             st.session_state.current_page = "Daily Tasks"
             st.rerun()
     
     with col2:
-        if st.button("📈 View Progress", use_container_width=True):
+        if st.button("📈 View Progress", width='stretch'):
             st.session_state.current_page = "Progress"
             st.rerun()
     
     with col3:
-        if st.button("🏠 Back to Home", use_container_width=True):
+        if st.button("🏠 Back to Home", width='stretch'):
             st.session_state.current_page = "Home"
             st.rerun()
     
@@ -274,11 +381,11 @@ def show_action_buttons():
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📄 Download as PDF", use_container_width=True):
+            if st.button("📄 Download as PDF", width='stretch'):
                 st.info("PDF export coming soon!")
         
         with col2:
-            if st.button("📋 Download as Markdown", use_container_width=True):
+            if st.button("📋 Download as Markdown", width='stretch'):
                 st.info("Markdown export coming soon!")
 
 

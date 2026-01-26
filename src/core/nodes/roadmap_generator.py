@@ -23,11 +23,16 @@ Given:
 - Daily time: {daily_minutes} minutes
 - Learning style: {learning_style}
 - Pace: {pace}
+{preferences_section}
 
-Create a roadmap with 4-5 modules that:
+CRITICAL: Consider ALL the user's preferences, especially deadlines, timelines, and constraints!
+
+Create a roadmap with 3-5 modules that:
 - Progressively builds skills
 - Matches the user's pace and time availability
 - Adapts to their learning style
+- RESPECTS any deadlines or timeline constraints mentioned in preferences
+- Is realistic given daily time commitment and timeline
 - Includes clear objectives
 
 Return ONLY valid JSON in this exact format:
@@ -38,7 +43,17 @@ Return ONLY valid JSON in this exact format:
             "title": "Module Title",
             "description": "What this module covers",
             "estimated_weeks": 2,
-            "topics": ["topic1", "topic2", "topic3"]
+            "difficulty": "beginner|intermediate|advanced",
+            "topics": ["topic1", "topic2", "topic3"],
+            "objectives": ["Learn objective 1", "Master objective 2", "Build objective 3"],
+            "resources": [
+                {{
+                    "title": "Resource Title",
+                    "type": "video|article|course|interactive|book",
+                    "url": "https://example.com",
+                    "description": "Brief description"
+                }}
+            ]
         }}
     ],
     "total_weeks": 10,
@@ -80,11 +95,21 @@ def roadmap_generator_node(state: AppState) -> AppState:
         daily_minutes = state.get("daily_minutes", 30)
         learning_style = state.get("learning_style", "visual")
         pace = state.get("pace", "medium")
+        preferences = state.get("preferences", {})
         
         logger.info(
             f"[{node_name}] Generating roadmap for: {goal_text[:50]}... "
             f"(level={level}, style={learning_style}, pace={pace})"
         )
+        
+        # Build preferences section for prompt
+        preferences_section = ""
+        if preferences and isinstance(preferences, dict) and len(preferences) > 0:
+            preferences_section = "\nAdditional Preferences/Constraints:"
+            for key, value in preferences.items():
+                if value:
+                    preferences_section += f"\n- {key}: {value}"
+            logger.info(f"[{node_name}] Including preferences: {preferences}")
         
         # Prepare prompt
         prompt = ROADMAP_GENERATION_PROMPT.format(
@@ -92,7 +117,8 @@ def roadmap_generator_node(state: AppState) -> AppState:
             level=level,
             daily_minutes=daily_minutes,
             learning_style=learning_style,
-            pace=pace
+            pace=pace,
+            preferences_section=preferences_section
         )
         
         messages = [
@@ -191,6 +217,9 @@ def _create_fallback_roadmap(state: AppState) -> Dict[str, Any]:
     """Create a simple fallback roadmap if LLM fails."""
     logger.warning("Creating fallback roadmap")
     
+    goal_text = state.get("goal_text", "your goal")
+    level = state.get("level", "beginner")
+    
     return {
         "modules": [
             {
@@ -198,14 +227,42 @@ def _create_fallback_roadmap(state: AppState) -> Dict[str, Any]:
                 "title": "Fundamentals",
                 "description": "Core concepts and basics",
                 "estimated_weeks": 2,
-                "topics": ["Introduction", "Basic Concepts", "Practice"]
+                "difficulty": level,
+                "topics": ["Introduction", "Basic Concepts", "Practice"],
+                "objectives": [
+                    f"Understand the fundamentals of {goal_text}",
+                    "Complete basic exercises",
+                    "Build confidence with core concepts"
+                ],
+                "resources": [
+                    {
+                        "title": "Getting Started Guide",
+                        "type": "article",
+                        "url": "https://example.com/getting-started",
+                        "description": "Comprehensive introduction to the basics"
+                    }
+                ]
             },
             {
                 "id": 2,
                 "title": "Intermediate Skills",
                 "description": "Building on the basics",
                 "estimated_weeks": 3,
-                "topics": ["Advanced Topics", "Real Projects", "Best Practices"]
+                "difficulty": "intermediate",
+                "topics": ["Advanced Topics", "Real Projects", "Best Practices"],
+                "objectives": [
+                    "Apply concepts to real projects",
+                    "Learn best practices",
+                    "Develop practical skills"
+                ],
+                "resources": [
+                    {
+                        "title": "Advanced Tutorial",
+                        "type": "video",
+                        "url": "https://example.com/advanced",
+                        "description": "Deep dive into advanced concepts"
+                    }
+                ]
             }
         ],
         "total_weeks": 5,

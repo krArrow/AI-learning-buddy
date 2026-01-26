@@ -30,8 +30,9 @@ def resource_retriever_node(state: AppState) -> AppState:
     state["current_node"] = node_name
     
     logger.info(f"[{node_name}] Starting resource retrieval")
-    logger.debug(f"[{node_name}] Goal: {state.get('goal_text', 'N/A')[:50]}...")
-    logger.debug(f"[{node_name}] Learning style: {state.get('learning_style', 'N/A')}")
+    goal_text = state.get('goal_text', 'N/A')
+    learning_style = state.get('learning_style', 'N/A')
+    logger.info(f"[{node_name}] Goal: '{goal_text}' | Learning Style: {learning_style}")
     
     try:
         # Initialize Content Curator Agent
@@ -40,9 +41,24 @@ def resource_retriever_node(state: AppState) -> AppState:
         # Curate resources
         state = curator.curate_resources(state, max_resources=10)
         
-        # Log results
+        # Log results with detailed info
         resources_count = len(state.get("resources", []))
+        resources = state.get("resources", [])
+        
         logger.info(f"[{node_name}] Retrieved {resources_count} resources")
+        
+        if resources:
+            logger.info(f"[{node_name}] Resource Details:")
+            for i, resource in enumerate(resources[:5], 1):
+                logger.info(
+                    f"  {i}. Title: {resource.get('title', 'Unknown')[:60]}")
+                logger.info(
+                    f"     Type: {resource.get('type', 'unknown')} | "
+                    f"Platform: {resource.get('platform', 'N/A')}")
+                logger.info(
+                    f"     Desc: {resource.get('description', 'N/A')[:60]}")
+        else:
+            logger.warning(f"[{node_name}] No resources were retrieved!")
         
         # Track execution time
         elapsed = time.time() - start_time
